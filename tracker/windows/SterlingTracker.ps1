@@ -10,6 +10,7 @@ $PayoutUrl = ($ApiBase.TrimEnd('/')) + '/api/tracker/payout'
 $SessionCode = 'win-' + [guid]::NewGuid().ToString('N')
 $headers = @{ Authorization = "Bearer $TrackerKey" }
 $lastPayoutCheck = [datetime]::MinValue
+$safeSince = $null
 
 function Get-Prop($obj, [string[]]$paths) {
   foreach ($path in $paths) {
@@ -49,10 +50,7 @@ function Get-NewestLocalEts2Save {
 
 function Add-MoneyToTextSave([string]$savePath,[decimal]$amount) {
   $lines = [System.IO.File]::ReadAllLines($savePath)
-  if ($lines.Count -eq 0 -or -not (($lines -join "`n") -match 'money_account\s*:')) {
-    throw 'This save is not readable as a text save. Set g_save_format to 2, save the game again, close ETS2, then retry.'
-  }
-
+  if ($lines.Count -eq 0 -or -not (($lines -join "`n") -match 'money_account\s*:')) { throw 'This save is not readable as a text save. Set g_save_format to 2 and save the game again.' }
   $stack = New-Object System.Collections.Generic.List[string]
   $bankIndex = -1; $economyIndex = -1
   for ($i=0; $i -lt $lines.Count; $i++) {
@@ -77,33 +75,45 @@ function Add-MoneyToTextSave([string]$savePath,[decimal]$amount) {
   return @{ Old=$old; New=$new; Backup=$backup }
 }
 
-function Try-ApplyPendingPayout {
+function Test-SafePayoutState($raw) {
+  $running = $null -ne (Get-Process -Name 'eurotrucks2' -ErrorAction SilentlyContinue)
+  if (-not $running) { $script:safeSince=$null; return $true }
+  if ($null -eq $raw) { $script:safeSince=$null; return $false }
+  $sdk = As-Bool (Get-Prop $raw @('SdkActive'))
+  $paused = As-Bool (Get-Prop $raw @('Paused'))
+  $onJob = As-Bool (Get-Prop $raw @('SpecialEventsValues.OnJob'))
+  $speed = As-Double (Get-Prop $raw @('TruckValues.CurrentValues.DashboardValues.Speed.Value','TruckValues.CurrentValues.DashboardValues.Speed.Kph'))
+  $engine = As-Bool (Get-Prop $raw @('TruckValues.CurrentValues.EngineEnabled'))
+  # Treat the game as payout-safe only when telemetry is inactive (menu/profile screen),
+  # or when it has remained paused, stationary, engine-off and off-job for 30 seconds.
+  $candidate = (-not $sdk) -or ($paused -and (-not $onJob) -and [math]::Abs($speed) -lt 0.05 -and (-not $engine))
+  if (-not $candidate) { $script:safeSince=$null; return $false }
+  if ($null -eq $script:safeSince) { $script:safeSince=Get-Date; return $false }
+  return (((Get-Date)-$script:safeSince).TotalSeconds -ge 30)
+}
+
+function Try-ApplyPendingPayout($raw) {
   if (((Get-Date) - $lastPayoutCheck).TotalSeconds -lt 15) { return }
   $script:lastPayoutCheck = Get-Date
   try {
     $response = Invoke-RestMethod -Method Get -Uri $PayoutUrl -Headers $headers -TimeoutSec 8
     $p = $response.payout
     if ($null -eq $p) { return }
-    $amount = [decimal]$p.amount
-    $id = [int64]$p.id
-    if (Get-Process -Name 'eurotrucks2' -ErrorAction SilentlyContinue) {
-      Write-Host ("[{0}] payout #{1} £{2:N2} waiting - close ETS2 to apply safely" -f (Get-Date -Format 'HH:mm:ss'),$id,$amount)
+    $amount = [decimal]$p.amount; $id = [int64]$p.id
+    if (-not (Test-SafePayoutState $raw)) {
+      Write-Host ("[{0}] payout #{1} £{2:N2} queued - return to menu / pause safely off-job, stationary and engine off" -f (Get-Date -Format 'HH:mm:ss'),$id,$amount)
       return
     }
     $save = Get-NewestLocalEts2Save
+    if (((Get-Date)-$save.LastWriteTime).TotalSeconds -lt 10) { Write-Host ("[{0}] payout #{1} waiting for save file to settle" -f (Get-Date -Format 'HH:mm:ss'),$id); return }
     $result = Add-MoneyToTextSave $save.FullName $amount
     $body = @{ savePath=$save.FullName } | ConvertTo-Json
     Invoke-RestMethod -Method Post -Uri "$PayoutUrl/$id/complete" -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 8 | Out-Null
-    Write-Host ("[{0}] ETS2 payout #{1} applied: £{2:N2}; game balance {3} -> {4}; backup {5}" -f (Get-Date -Format 'HH:mm:ss'),$id,$amount,$result.Old,$result.New,$result.Backup)
+    Write-Host ("[{0}] ETS2 payout #{1} applied: £{2:N2}; balance {3} -> {4}; backup {5}. Reload the save/profile before driving." -f (Get-Date -Format 'HH:mm:ss'),$id,$amount,$result.Old,$result.New,$result.Backup)
+    $script:safeSince=$null
   } catch {
     $msg=$_.Exception.Message
     Write-Host ("[{0}] ETS2 payout waiting: {1}" -f (Get-Date -Format 'HH:mm:ss'),$msg)
-    try {
-      if ($null -ne $p -and $null -ne $p.id) {
-        $failBody=@{error=$msg}|ConvertTo-Json
-        Invoke-RestMethod -Method Post -Uri "$PayoutUrl/$($p.id)/fail" -Headers $headers -ContentType 'application/json' -Body $failBody -TimeoutSec 5 | Out-Null
-      }
-    } catch {}
   }
 }
 
@@ -128,16 +138,18 @@ Write-Host 'Sterling Logistics Live Tracker'
 Write-Host "Telemetry source: $TelemetryUrl"
 Write-Host "Sterling API: $PostUrl"
 Write-Host 'Tracking hours, miles, jobs, fuel, damage, fines, tolls, rest stops and live status.'
-Write-Host 'ETS2 wallet sync enabled: queued /withdraw payouts apply only while ETS2 is closed, with a save backup first.'
+Write-Host 'ETS2 wallet sync: queued /withdraw payouts can apply with ETS2 open after 30 seconds in a safe idle/menu state; every edit is backed up first.'
 Write-Host ''
 
 $lastOnJob=$false; $lastGameTime=$null; $lastFlags=@{}
 foreach($n in @('JobDelivered','JobCancelled','Refuel','RefuelPayed','Fined','Tollgate','Ferry','Train')){$lastFlags[$n]=$false}
 
 while($true){
-  Try-ApplyPendingPayout
+  $raw=$null
+  try { $raw=Invoke-RestMethod -Method Get -Uri $TelemetryUrl -TimeoutSec 3 } catch {}
+  Try-ApplyPendingPayout $raw
   try{
-    $raw=Invoke-RestMethod -Method Get -Uri $TelemetryUrl -TimeoutSec 3
+    if($null-eq$raw){throw 'Telemetry service is not responding'}
     if(-not(As-Bool(Get-Prop $raw @('SdkActive')))){Write-Host("[{0}] ETS2 SDK is not active yet" -f(Get-Date -Format 'HH:mm:ss'));Start-Sleep -Seconds 5;continue}
     $onJob=As-Bool(Get-Prop $raw @('SpecialEventsValues.OnJob'));$event='heartbeat';$direct=$false;$gameTime=As-Double(Get-Prop $raw @('CommonValues.GameTime.Value'));$gameTimeJump=0.0
     if($null-ne$lastGameTime-and$gameTime-gt0){$gameTimeJump=$gameTime-$lastGameTime;if($gameTimeJump-lt0){$gameTimeJump=0}}
