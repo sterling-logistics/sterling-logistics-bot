@@ -23,11 +23,14 @@ export async function processDriverProgression(driverId){
   const x=d[0];if(!x||x.status!=='active')return null;
   if(['Owner','Founder','Executive Management','Senior Management'].includes(x.rank_name))return null;
   const score=await calculateDriveScore(driverId);
-  const next=rankFor(Number(x.total_miles||0),Number(x.jobs_completed||0),score.score);
-  let promoted=false;
-  if(next.name!==x.rank_name){
-    await db().execute("UPDATE drivers SET rank_name=?,safety_score=? WHERE id=?",[next.name,score.score,driverId]);
-    await db().execute("INSERT INTO promotions(driver_id,old_rank,new_rank,promoted_by) VALUES(?,?,?,'SYSTEM')",[driverId,x.rank_name,next.name]);
+  const earned=rankFor(Number(x.total_miles||0),Number(x.jobs_completed||0),score.score);
+  const storedIndex=RANKS.findIndex(r=>r.name===x.rank_name);
+  const earnedIndex=RANKS.findIndex(r=>r.name===earned.name);
+  let promoted=false,newRank=x.rank_name;
+  if(earnedIndex>storedIndex){
+    newRank=earned.name;
+    await db().execute("UPDATE drivers SET rank_name=?,safety_score=? WHERE id=?",[newRank,score.score,driverId]);
+    await db().execute("INSERT INTO promotions(driver_id,old_rank,new_rank,promoted_by) VALUES(?,?,?,'SYSTEM')",[driverId,x.rank_name,newRank]);
     promoted=true;
   }else await db().execute("UPDATE drivers SET safety_score=? WHERE id=?",[score.score,driverId]);
 
@@ -38,13 +41,13 @@ export async function processDriverProgression(driverId){
   if(jobs>=25&&await awardOnce(driverId,"25 Deliveries","Completed 25 tracked Sterling deliveries."))awards.push("25 Deliveries");
   if(jobs>=100&&await awardOnce(driverId,"Century Hauler","Completed 100 tracked Sterling deliveries."))awards.push("Century Hauler");
   if(score.score>=98&&jobs>=10&&await awardOnce(driverId,"Safety First","Maintained a DriveScore of 98+ with at least 10 deliveries."))awards.push("Safety First");
-  return{rank:next.name,promoted,oldRank:x.rank_name,driveScore:score.score,awards};
+  return{rank:newRank,promoted,oldRank:x.rank_name,driveScore:score.score,awards};
 }
 
 export async function getProgression(driverId){
   const[d]=await db().execute("SELECT rank_name,total_miles,jobs_completed FROM drivers WHERE id=? LIMIT 1",[driverId]);const x=d[0];if(!x)return null;
-  const score=await calculateDriveScore(driverId);const current=rankFor(Number(x.total_miles||0),Number(x.jobs_completed||0),score.score);const idx=RANKS.findIndex(r=>r.name===current.name);const next=RANKS[idx+1]||null;
-  return{current:current.name,storedRank:x.rank_name,miles:Number(x.total_miles||0),jobs:Number(x.jobs_completed||0),score:score.score,next};
+  const score=await calculateDriveScore(driverId);const earned=rankFor(Number(x.total_miles||0),Number(x.jobs_completed||0),score.score);const storedIdx=RANKS.findIndex(r=>r.name===x.rank_name);const next=storedIdx>=0?RANKS[storedIdx+1]||null:RANKS[1];
+  return{earned:earned.name,current:x.rank_name,miles:Number(x.total_miles||0),jobs:Number(x.jobs_completed||0),score:score.score,next};
 }
 
 export const progressionRanks=RANKS;
