@@ -18,6 +18,9 @@ import {createConvoy} from "./convoys/service.js";
 import {handleJobs} from "./jobs/service.js";
 import {ingestTelemetry,getLiveFleet,issueTrackerKey,authenticateTracker,ingestTrackerTelemetry,handleDrivingStats} from "./telemetry/service.js";
 import {handleLeaderboard,handleCompanyStats,handleDriverAdmin,handleAchievementGive,handleAchievements,handleOwnerStatus,handleOwnerBootstrap,handleDriverCreate,handleDriverList,handleDriverLookup,handleSetDepartment,handleSetTruckersMp,handleSetSteam,handleSetCountry,handleSetTimezone,handleSetSafety,handleSetMiles,handleAddJobs,handleTrackerStatus,handleRevokeTracker,handleIncidentHistory,handleFuelHistory} from "./operations/service.js";
+import {ensureDispatchSchema} from "./dispatch/schema.js";
+import {registerDispatchCommands} from "./dispatch/commands.js";
+import {handleWorkCreate,handleMyWork,handleWorkInfo,handleWorkList,handleWorkStart,handleWorkCancel,handleWorkReassign,handleDispatchBoard} from "./dispatch/service.js";
 
 const envPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.env");
 const envResult = dotenv.config({ path: envPath });
@@ -31,7 +34,7 @@ app.get("/health",async(_q,r)=>{try{const d=await pingDatabase();r.json({ok:true
 app.post("/api/telemetry",async(q,r)=>{try{if(!c.telemetryApiSecret)return r.status(503).json({ok:false,error:"Telemetry API not enabled"});if(q.headers.authorization!==`Bearer ${c.telemetryApiSecret}`)return r.status(401).json({ok:false,error:"Unauthorized"});r.json(await ingestTelemetry(q.body));}catch(e){r.status(400).json({ok:false,error:String(e.message||e)})}});
 app.post("/api/tracker/telemetry",async(q,r)=>{try{const auth=String(q.headers.authorization||"");const token=auth.startsWith("Bearer ")?auth.slice(7):"";const driver=await authenticateTracker(token);if(!driver)return r.status(401).json({ok:false,error:"Invalid tracker key"});const out=await ingestTrackerTelemetry(driver.driver_id,q.body||{});r.json({...out,driver:driver.sterling_driver_id});}catch(e){console.error("[Tracker API]",e);r.status(400).json({ok:false,error:String(e.message||e)})}});
 app.listen(c.port,"0.0.0.0",()=>console.log(`[API] Listening on ${c.port}`));
-client.once(Events.ClientReady,async me=>{console.log(`[Discord] Logged in as ${me.user.tag}`);try{const d=await pingDatabase();console.log(`[DB] Connected to ${d.db} as ${d.username}`);await ensureSchema();console.log("[DB] MySQL schema ready");const g=await client.guilds.fetch(c.guildId);const x=await reconcileTickets(g);console.log(`[Tickets] Startup repair: ${x.valid} valid, ${x.stale} stale, ${x.duplicates} duplicate repaired`);await registerCommands(c);console.log("[Sterling] Bot ready");}catch(e){console.error("[Startup]",e);}});client.on(Events.ChannelDelete,handleManualChannelDelete);
+client.once(Events.ClientReady,async me=>{console.log(`[Discord] Logged in as ${me.user.tag}`);try{const d=await pingDatabase();console.log(`[DB] Connected to ${d.db} as ${d.username}`);await ensureSchema();await ensureDispatchSchema();console.log("[DB] MySQL schema ready");const g=await client.guilds.fetch(c.guildId);const x=await reconcileTickets(g);console.log(`[Tickets] Startup repair: ${x.valid} valid, ${x.stale} stale, ${x.duplicates} duplicate repaired`);await registerCommands(c);await registerDispatchCommands(c);console.log("[Sterling] Bot ready");}catch(e){console.error("[Startup]",e);}});client.on(Events.ChannelDelete,handleManualChannelDelete);
 client.on(Events.InteractionCreate,async i=>{try{
 if(i.isModalSubmit()){if(i.customId==="sterling_application_modal")return submitApplication(i);if(i.customId.startsWith("sterling_review_modal:"))return handleReviewModal(i,client,c);}
 if(i.isButton()){if(i.customId==="sterling_verify")return handleVerify(i,c);if(i.customId==="sterling_open_ticket")return openTicket(i,client,c);if(i.customId.startsWith("sterling_review:"))return handleReviewButton(i);return;}
@@ -66,6 +69,14 @@ if(i.commandName==="trackerstatus")return handleTrackerStatus(i);
 if(i.commandName==="revoketracker")return handleRevokeTracker(i);
 if(i.commandName==="incidenthistory")return handleIncidentHistory(i);
 if(i.commandName==="fuelhistory")return handleFuelHistory(i);
+if(i.commandName==="workcreate")return handleWorkCreate(i);
+if(i.commandName==="mywork")return handleMyWork(i);
+if(i.commandName==="workinfo")return handleWorkInfo(i);
+if(i.commandName==="worklist")return handleWorkList(i);
+if(i.commandName==="workstart")return handleWorkStart(i);
+if(i.commandName==="workcancel")return handleWorkCancel(i);
+if(i.commandName==="workreassign")return handleWorkReassign(i);
+if(i.commandName==="dispatchboard")return handleDispatchBoard(i);
 if(i.commandName==="apply")return openApplicationModal(i);
 if(i.commandName==="application"){const m={accept:"accepted",reject:"rejected",interview:"interview",hold:"hold"};return setApplicationStatus(i,m[i.options.getSubcommand()]);}
 if(i.commandName==="hrcase")return createHrCase(i);
