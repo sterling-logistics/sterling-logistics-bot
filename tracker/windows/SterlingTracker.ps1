@@ -33,6 +33,15 @@ function Send-Telemetry($eventType, $raw, $direct=$false) {
   $dst = Get-Prop $raw @('JobValues.CityDestination','JobValues.DestinationCity','job.destinationCity')
   $distanceKm = Get-Prop $raw @('JobValues.Delivered.DeliveryDistance','JobValues.JobDeliveredDistanceKm','job.distanceKm')
   $revenue = Get-Prop $raw @('JobValues.Delivered.Revenue','JobValues.JobDeliveredRevenue','job.revenue')
+  $fuel = Get-Prop $raw @('TruckValues.CurrentValues.DashboardValues.FuelValue.Amount','TruckValues.CurrentValues.Fuel','truck.fuel')
+  $odometer = Get-Prop $raw @('TruckValues.CurrentValues.DashboardValues.Odometer','TruckValues.CurrentValues.Odometer','truck.odometer')
+  $truckDamage = Get-Prop $raw @('TruckValues.CurrentValues.DamageValues.Truck','TruckValues.CurrentValues.Damage.Truck','truck.damage')
+  $trailerDamage = Get-Prop $raw @('TrailerValues.Damage','TrailerValues.CurrentValues.Damage','trailer.damage')
+  $cargoDamage = Get-Prop $raw @('JobValues.CargoValues.Damage','JobValues.CargoDamage','job.cargoDamage')
+  $engineOn = Get-Prop $raw @('TruckValues.CurrentValues.LightsValues.EngineEnabled','TruckValues.CurrentValues.EngineEnabled','truck.engineOn')
+  $lat = Get-Prop $raw @('TruckValues.CurrentValues.Position.X','truck.position.x','position.x')
+  $lon = Get-Prop $raw @('TruckValues.CurrentValues.Position.Z','truck.position.z','position.z')
+  $rpm = Get-Prop $raw @('TruckValues.CurrentValues.DashboardValues.RPM.Value','TruckValues.CurrentValues.RPM','truck.rpm')
 
   $data = [ordered]@{
     game = (Get-Prop $raw @('Game'))
@@ -43,6 +52,15 @@ function Send-Telemetry($eventType, $raw, $direct=$false) {
     destinationCity = $dst
     distanceKm = if ($null -ne $distanceKm) { [double]$distanceKm } else { 0 }
     revenue = if ($null -ne $revenue) { "$revenue" } else { '0' }
+    fuelLiters = if ($null -ne $fuel) { [double]$fuel } else { 0 }
+    odometerKm = if ($null -ne $odometer) { [double]$odometer } else { 0 }
+    truckDamage = if ($null -ne $truckDamage) { [double]$truckDamage } else { 0 }
+    trailerDamage = if ($null -ne $trailerDamage) { [double]$trailerDamage } else { 0 }
+    cargoDamage = if ($null -ne $cargoDamage) { [double]$cargoDamage } else { 0 }
+    engineOn = if ($null -ne $engineOn) { [bool]$engineOn } else { $false }
+    engineRpm = if ($null -ne $rpm) { [double]$rpm } else { 0 }
+    latitude = if ($null -ne $lat) { [double]$lat } else { $null }
+    longitude = if ($null -ne $lon) { [double]$lon } else { $null }
     raw = $raw
   }
 
@@ -60,7 +78,7 @@ function Send-Telemetry($eventType, $raw, $direct=$false) {
 Write-Host 'Sterling Logistics Live Tracker'
 Write-Host "Telemetry source: $TelemetryUrl"
 Write-Host "Sterling API: $PostUrl"
-Write-Host 'Start ETS2 and keep the Telemetry JSON Service running.'
+Write-Host 'Tracking hours, driving time, fuel, damage, jobs and live status.'
 
 $lastOnJob = $false
 while ($true) {
