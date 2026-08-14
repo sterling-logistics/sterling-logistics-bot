@@ -16,7 +16,8 @@ new SlashCommandBuilder().setName("worklist").setDescription("List Sterling work
 new SlashCommandBuilder().setName("workstart").setDescription("Manually mark one of your assignments in progress").addStringOption(o=>o.setName("code").setDescription("Work code").setRequired(true)),
 new SlashCommandBuilder().setName("workcancel").setDescription("Cancel a Sterling work assignment").setDefaultMemberPermissions(admin).addStringOption(o=>o.setName("code").setDescription("Work code").setRequired(true)).addStringOption(o=>o.setName("reason").setDescription("Cancellation reason").setRequired(false)),
 new SlashCommandBuilder().setName("workreassign").setDescription("Reassign work to another driver").setDefaultMemberPermissions(admin).addStringOption(o=>o.setName("code").setDescription("Work code").setRequired(true)).addUserOption(o=>o.setName("user").setDescription("New driver").setRequired(true)),
-new SlashCommandBuilder().setName("dispatchboard").setDescription("Show active Sterling dispatch work").setDefaultMemberPermissions(admin)
+new SlashCommandBuilder().setName("dispatchboard").setDescription("Show active Sterling dispatch work").setDefaultMemberPermissions(admin),
+new SlashCommandBuilder().setName("withdraw").setDescription("Transfer money from your Sterling wallet into your ETS2 save").addNumberOption(o=>o.setName("amount").setDescription("Amount to transfer into ETS2").setRequired(true).setMinValue(1))
 ].map(x=>x.toJSON());}
 
 export async function registerDispatchCommands(c){
