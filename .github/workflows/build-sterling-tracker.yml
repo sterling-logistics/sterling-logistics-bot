@@ -43,14 +43,16 @@ jobs:
           New-Item -ItemType Directory -Force -Path .\dist | Out-Null
           & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' .\installer\SterlingTracker.iss
 
-      - name: Upload portable build
+      # Driver download — this is the only build we advertise publicly.
+      - name: Upload driver installer
         uses: actions/upload-artifact@v4
         with:
-          name: SterlingTracker-portable-win-x64
-          path: publish/SterlingTracker/**
-
-      - name: Upload installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: SterlingTrackerSetup
+          name: DOWNLOAD-Sterling-Tracker
           path: dist/SterlingTrackerSetup.exe
+
+      # Developer/testing copy — kept clearly separate from the driver installer.
+      - name: Upload developer portable build
+        uses: actions/upload-artifact@v4
+        with:
+          name: DEV-ONLY-SterlingTracker-Portable
+          path: publish/SterlingTracker/**
