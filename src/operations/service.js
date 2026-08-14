@@ -1,76 +1,48 @@
+import crypto from "node:crypto";
 import {EmbedBuilder,MessageFlags} from "discord.js";
 import {db} from "../database/mysql.js";
-import {getDriver} from "../drivers/service.js";
+import {getDriver,createDriver} from "../drivers/service.js";
 
 const metricMap={monthly:{column:"monthly_miles",label:"Monthly Miles",format:v=>Number(v).toLocaleString()},total:{column:"total_miles",label:"Total Miles",format:v=>Number(v).toLocaleString()},jobs:{column:"jobs_completed",label:"Jobs Completed",format:v=>String(v)},safety:{column:"safety_score",label:"Safety Score",format:v=>`${Number(v).toFixed(1)}/100`}};
+const isOwner=i=>Boolean(i.guild&&i.guild.ownerId===i.user.id);
+const denyOwner=i=>i.reply({content:"Only the Discord server owner can use this command.",flags:MessageFlags.Ephemeral});
 
-export async function handleLeaderboard(i){
-  const metric=i.options.getString("metric")||"monthly";
-  const m=metricMap[metric]||metricMap.monthly;
-  const [rows]=await db().query(`SELECT sterling_driver_id,discord_id,discord_username,${m.column} value FROM drivers WHERE status='active' ORDER BY ${m.column} DESC LIMIT 10`);
-  const text=rows.length?rows.map((r,n)=>`**${n+1}.** ${r.sterling_driver_id||"SL-????"} — <@${r.discord_id}> — **${m.format(r.value)}**`).join("\n"):"No active drivers found yet.";
-  return i.reply({embeds:[new EmbedBuilder().setTitle(`Sterling Logistics Leaderboard | ${m.label}`).setDescription(text)]});
-}
+export async function handleLeaderboard(i){const metric=i.options.getString("metric")||"monthly";const m=metricMap[metric]||metricMap.monthly;const [rows]=await db().query(`SELECT sterling_driver_id,discord_id,discord_username,${m.column} value FROM drivers WHERE status='active' ORDER BY ${m.column} DESC LIMIT 10`);const text=rows.length?rows.map((r,n)=>`**${n+1}.** ${r.sterling_driver_id||"SL-????"} — <@${r.discord_id}> — **${m.format(r.value)}**`).join("\n"):"No active drivers found yet.";return i.reply({embeds:[new EmbedBuilder().setTitle(`Sterling Logistics Leaderboard | ${m.label}`).setDescription(text)]});}
 
-export async function handleCompanyStats(i){
-  const [d]=await db().query("SELECT COUNT(*) active_drivers,COALESCE(SUM(total_miles),0) total_miles,COALESCE(SUM(monthly_miles),0) monthly_miles,COALESCE(SUM(jobs_completed),0) jobs_completed,COALESCE(AVG(safety_score),0) safety_score FROM drivers WHERE status='active'");
-  const [j]=await db().query("SELECT COUNT(*) jobs,COALESCE(SUM(distance_miles),0) miles,COALESCE(SUM(income),0) income FROM jobs WHERE status='completed'");
-  const [c]=await db().query("SELECT COUNT(*) convoys FROM convoys");
-  const s=d[0],js=j[0];
-  return i.reply({embeds:[new EmbedBuilder().setTitle("Sterling Logistics Company Statistics").addFields(
-    {name:"Active Drivers",value:String(s.active_drivers),inline:true},
-    {name:"Total Driver Miles",value:Number(s.total_miles).toLocaleString(),inline:true},
-    {name:"Monthly Miles",value:Number(s.monthly_miles).toLocaleString(),inline:true},
-    {name:"Jobs Completed",value:String(js.jobs||s.jobs_completed),inline:true},
-    {name:"Recorded Job Miles",value:Number(js.miles).toLocaleString(),inline:true},
-    {name:"Average Safety",value:`${Number(s.safety_score).toFixed(1)}/100`,inline:true},
-    {name:"Convoys Created",value:String(c[0].convoys),inline:true},
-    {name:"Recorded Income",value:`€${Number(js.income).toLocaleString()}`,inline:true}
-  )]});
-}
+export async function handleCompanyStats(i){const [d]=await db().query("SELECT COUNT(*) active_drivers,COALESCE(SUM(total_miles),0) total_miles,COALESCE(SUM(monthly_miles),0) monthly_miles,COALESCE(SUM(jobs_completed),0) jobs_completed,COALESCE(AVG(safety_score),0) safety_score FROM drivers WHERE status='active'");const [j]=await db().query("SELECT COUNT(*) jobs,COALESCE(SUM(distance_miles),0) miles,COALESCE(SUM(income),0) income FROM jobs WHERE status='completed'");const [c]=await db().query("SELECT COUNT(*) convoys FROM convoys");const s=d[0],js=j[0];return i.reply({embeds:[new EmbedBuilder().setTitle("Sterling Logistics Company Statistics").addFields({name:"Active Drivers",value:String(s.active_drivers),inline:true},{name:"Total Driver Miles",value:Number(s.total_miles).toLocaleString(),inline:true},{name:"Monthly Miles",value:Number(s.monthly_miles).toLocaleString(),inline:true},{name:"Jobs Completed",value:String(js.jobs||s.jobs_completed),inline:true},{name:"Recorded Job Miles",value:Number(js.miles).toLocaleString(),inline:true},{name:"Average Safety",value:`${Number(s.safety_score).toFixed(1)}/100`,inline:true},{name:"Convoys Created",value:String(c[0].convoys),inline:true},{name:"Recorded Income",value:`€${Number(js.income).toLocaleString()}`,inline:true})]});}
 
 async function audit(actor,action,target,details){await db().execute("INSERT INTO audit_logs(actor_discord_id,action,target_discord_id,details) VALUES(?,?,?,?)",[actor,action,target,details||null]);}
 
-export async function handleDriverAdmin(i){
-  const sub=i.options.getSubcommand();
-  const u=i.options.getUser("user",true);
-  const d=await getDriver(u.id);
-  if(!d)return i.reply({content:"That member does not have a Sterling driver profile yet.",flags:MessageFlags.Ephemeral});
-  if(sub==="setrank"){
-    const rank=i.options.getString("rank",true).trim();
-    const old=d.rank_name;
-    await db().execute("UPDATE drivers SET rank_name=? WHERE id=?",[rank,d.id]);
-    await db().execute("INSERT INTO promotions(driver_id,old_rank,new_rank,promoted_by) VALUES(?,?,?,?)",[d.id,old,rank,i.user.id]);
-    await audit(i.user.id,"driver.rank",u.id,`${old} -> ${rank}`);
-    return i.reply({content:`Updated <@${u.id}> from **${old}** to **${rank}**.`});
-  }
-  if(sub==="setstatus"){
-    const status=i.options.getString("status",true);
-    await db().execute("UPDATE drivers SET status=?,left_at=IF(?='left',CURRENT_TIMESTAMP,left_at) WHERE id=?",[status,status,d.id]);
-    await audit(i.user.id,"driver.status",u.id,status);
-    return i.reply({content:`Updated <@${u.id}> status to **${status}**.`});
-  }
-  if(sub==="addmiles"){
-    const miles=i.options.getNumber("miles",true);
-    await db().execute("UPDATE drivers SET total_miles=total_miles+?,monthly_miles=monthly_miles+? WHERE id=?",[miles,miles,d.id]);
-    await audit(i.user.id,"driver.addmiles",u.id,String(miles));
-    return i.reply({content:`Added **${Number(miles).toLocaleString()} miles** to <@${u.id}>.`});
-  }
-}
+export async function handleOwnerStatus(i){if(!isOwner(i))return denyOwner(i);const d=await getDriver(i.user.id);return i.reply({embeds:[new EmbedBuilder().setTitle("👑 Sterling Bot Owner").setDescription(`You are recognised as the Discord server owner and have owner-level Sterling management access.`).addFields({name:"Discord",value:`<@${i.user.id}>`,inline:true},{name:"Driver Profile",value:d?`${d.sterling_driver_id} (${d.status})`:"Not created yet",inline:true},{name:"Guild",value:i.guild?.name||"Unknown",inline:true})],flags:MessageFlags.Ephemeral});}
 
-export async function handleAchievementGive(i){
-  const u=i.options.getUser("user",true);const d=await getDriver(u.id);
-  if(!d)return i.reply({content:"That member does not have a Sterling driver profile yet.",flags:MessageFlags.Ephemeral});
-  const name=i.options.getString("name",true).trim();const description=i.options.getString("description")?.trim()||null;
-  await db().execute("INSERT INTO achievements(driver_id,name,description,awarded_by) VALUES(?,?,?,?)",[d.id,name,description,i.user.id]);
-  await audit(i.user.id,"achievement.give",u.id,name);
-  return i.reply({content:`🏆 Awarded **${name}** to <@${u.id}>.`});
-}
+export async function handleOwnerBootstrap(i){if(!isOwner(i))return denyOwner(i);let d=await getDriver(i.user.id);if(!d)d=await createDriver(i.user.id,i.user.username);await db().execute("UPDATE drivers SET rank_name='Owner',department='Management',status='active' WHERE id=?",[d.id]);await audit(i.user.id,"owner.bootstrap",i.user.id,d.sterling_driver_id);return i.reply({content:`👑 Owner profile ready: **${d.sterling_driver_id}**. You can now run \`/trackerkey\`.`,flags:MessageFlags.Ephemeral});}
 
-export async function handleAchievements(i){
-  const u=i.options.getUser("user")||i.user;const d=await getDriver(u.id);
-  if(!d)return i.reply({content:"No Sterling driver profile found.",flags:MessageFlags.Ephemeral});
-  const [rows]=await db().execute("SELECT name,description,awarded_at FROM achievements WHERE driver_id=? ORDER BY awarded_at DESC LIMIT 15",[d.id]);
-  const text=rows.length?rows.map(r=>`🏆 **${r.name}**${r.description?` — ${r.description}`:""}`).join("\n"):"No achievements recorded yet.";
-  return i.reply({embeds:[new EmbedBuilder().setTitle(`Achievements | ${d.sterling_driver_id}`).setDescription(text)]});
-}
+export async function handleDriverCreate(i){const u=i.options.getUser("user",true);let d=await getDriver(u.id);if(d)return i.reply({content:`<@${u.id}> already has driver profile **${d.sterling_driver_id}**.`,flags:MessageFlags.Ephemeral});d=await createDriver(u.id,u.username,i.options.getString("truckersmp")||null);const rank=i.options.getString("rank")||"Trainee Driver";await db().execute("UPDATE drivers SET rank_name=?,status='active' WHERE id=?",[rank,d.id]);await audit(i.user.id,"driver.create",u.id,`${d.sterling_driver_id} | ${rank}`);return i.reply({content:`✅ Created <@${u.id}> as **${d.sterling_driver_id}** (${rank}).`});}
+
+export async function handleDriverList(i){const [rows]=await db().query("SELECT sterling_driver_id,discord_id,rank_name,status,department FROM drivers ORDER BY joined_at ASC LIMIT 50");const text=rows.length?rows.map(r=>`**${r.sterling_driver_id}** — <@${r.discord_id}> — ${r.rank_name} — ${r.status}${r.department?` — ${r.department}`:""}`).join("\n"):"No drivers yet.";return i.reply({embeds:[new EmbedBuilder().setTitle("Sterling Driver Roster").setDescription(text.slice(0,4000))]});}
+
+export async function handleDriverLookup(i){const u=i.options.getUser("user",true);const d=await getDriver(u.id);if(!d)return i.reply({content:"No Sterling driver profile found.",flags:MessageFlags.Ephemeral});return i.reply({embeds:[new EmbedBuilder().setTitle(`Driver Lookup | ${d.sterling_driver_id}`).addFields({name:"Driver",value:`<@${d.discord_id}>`,inline:true},{name:"Rank",value:d.rank_name,inline:true},{name:"Status",value:d.status,inline:true},{name:"Department",value:d.department||"Not set",inline:true},{name:"TruckersMP",value:d.truckersmp_id||"Not set",inline:true},{name:"Steam",value:d.steam_id||"Not set",inline:true},{name:"Country",value:d.country||"Not set",inline:true},{name:"Timezone",value:d.timezone||"Not set",inline:true},{name:"Miles",value:Number(d.total_miles).toLocaleString(),inline:true},{name:"Jobs",value:String(d.jobs_completed),inline:true},{name:"Safety",value:`${Number(d.safety_score).toFixed(1)}/100`,inline:true})]});}
+
+async function setField(i,column,label,value){const u=i.options.getUser("user",true);const d=await getDriver(u.id);if(!d)return i.reply({content:"That member does not have a Sterling driver profile yet.",flags:MessageFlags.Ephemeral});await db().execute(`UPDATE drivers SET ${column}=? WHERE id=?`,[value,d.id]);await audit(i.user.id,`driver.${column}`,u.id,String(value));return i.reply({content:`Updated <@${u.id}> ${label} to **${value}**.`});}
+export const handleSetDepartment=i=>setField(i,"department","department",i.options.getString("department",true));
+export const handleSetTruckersMp=i=>setField(i,"truckersmp_id","TruckersMP ID",i.options.getString("id",true));
+export const handleSetSteam=i=>setField(i,"steam_id","Steam ID",i.options.getString("id",true));
+export const handleSetCountry=i=>setField(i,"country","country",i.options.getString("country",true));
+export const handleSetTimezone=i=>setField(i,"timezone","timezone",i.options.getString("timezone",true));
+export const handleSetSafety=i=>setField(i,"safety_score","safety score",i.options.getNumber("score",true));
+export const handleSetMiles=i=>setField(i,"total_miles","total miles",i.options.getNumber("miles",true));
+
+export async function handleAddJobs(i){const u=i.options.getUser("user",true);const d=await getDriver(u.id);if(!d)return i.reply({content:"That member does not have a Sterling driver profile yet.",flags:MessageFlags.Ephemeral});const n=i.options.getInteger("count",true);await db().execute("UPDATE drivers SET jobs_completed=jobs_completed+? WHERE id=?",[n,d.id]);await audit(i.user.id,"driver.addjobs",u.id,String(n));return i.reply({content:`Added **${n}** completed job(s) to <@${u.id}>.`});}
+
+export async function handleTrackerStatus(i){const u=i.options.getUser("user")||i.user;const d=await getDriver(u.id);if(!d)return i.reply({content:"No Sterling driver profile found.",flags:MessageFlags.Ephemeral});const [r]=await db().execute("SELECT created_at,last_used_at,revoked_at FROM tracker_tokens WHERE driver_id=? LIMIT 1",[d.id]);const [l]=await db().execute("SELECT status,truck,cargo,source_city,destination_city,speed_mph,last_seen_at FROM live_telemetry WHERE driver_id=? LIMIT 1",[d.id]);const t=r[0],x=l[0];return i.reply({embeds:[new EmbedBuilder().setTitle(`Tracker Status | ${d.sterling_driver_id}`).addFields({name:"Tracker Key",value:t&&!t.revoked_at?"Active":"Not active",inline:true},{name:"Last Key Use",value:t?.last_used_at?String(t.last_used_at):"Never",inline:true},{name:"Live",value:x?`${x.status} — ${Number(x.speed_mph||0).toFixed(0)} mph`:"No live session",inline:true},{name:"Truck",value:x?.truck||"—",inline:true},{name:"Route",value:x?`${x.source_city||"?"} → ${x.destination_city||"?"}`:"—",inline:true},{name:"Cargo",value:x?.cargo||"—",inline:true})],flags:MessageFlags.Ephemeral});}
+
+export async function handleRevokeTracker(i){const u=i.options.getUser("user",true);const d=await getDriver(u.id);if(!d)return i.reply({content:"No Sterling driver profile found.",flags:MessageFlags.Ephemeral});await db().execute("UPDATE tracker_tokens SET revoked_at=NOW() WHERE driver_id=?",[d.id]);await audit(i.user.id,"tracker.revoke",u.id,null);return i.reply({content:`Revoked Sterling Tracker access for <@${u.id}>.`});}
+
+export async function handleIncidentHistory(i){const u=i.options.getUser("user")||i.user;const d=await getDriver(u.id);if(!d)return i.reply({content:"No Sterling driver profile found.",flags:MessageFlags.Ephemeral});const [rows]=await db().execute("SELECT event_type,speed_mph,damage_delta,occurred_at FROM driver_incidents WHERE driver_id=? ORDER BY occurred_at DESC LIMIT 10",[d.id]);const text=rows.length?rows.map(r=>`**${r.event_type}** — ${Number(r.speed_mph||0).toFixed(0)} mph — damage +${Number(r.damage_delta||0).toFixed(3)} — ${r.occurred_at}`).join("\n"):"No incidents recorded.";return i.reply({embeds:[new EmbedBuilder().setTitle(`Incident History | ${d.sterling_driver_id}`).setDescription(text)]});}
+
+export async function handleFuelHistory(i){const u=i.options.getUser("user")||i.user;const d=await getDriver(u.id);if(!d)return i.reply({content:"No Sterling driver profile found.",flags:MessageFlags.Ephemeral});const [rows]=await db().execute("SELECT liters_added,fuel_before,fuel_after,occurred_at FROM fuel_stops WHERE driver_id=? ORDER BY occurred_at DESC LIMIT 10",[d.id]);const text=rows.length?rows.map(r=>`⛽ **${Number(r.liters_added).toFixed(1)} L** — ${Number(r.fuel_before||0).toFixed(1)} → ${Number(r.fuel_after||0).toFixed(1)} L — ${r.occurred_at}`).join("\n"):"No fuel stops recorded.";return i.reply({embeds:[new EmbedBuilder().setTitle(`Fuel History | ${d.sterling_driver_id}`).setDescription(text)]});}
+
+export async function handleDriverAdmin(i){const sub=i.options.getSubcommand();const u=i.options.getUser("user",true);const d=await getDriver(u.id);if(!d)return i.reply({content:"That member does not have a Sterling driver profile yet.",flags:MessageFlags.Ephemeral});if(sub==="setrank"){const rank=i.options.getString("rank",true).trim();const old=d.rank_name;await db().execute("UPDATE drivers SET rank_name=? WHERE id=?",[rank,d.id]);await db().execute("INSERT INTO promotions(driver_id,old_rank,new_rank,promoted_by) VALUES(?,?,?,?)",[d.id,old,rank,i.user.id]);await audit(i.user.id,"driver.rank",u.id,`${old} -> ${rank}`);return i.reply({content:`Updated <@${u.id}> from **${old}** to **${rank}**.`});}if(sub==="setstatus"){const status=i.options.getString("status",true);await db().execute("UPDATE drivers SET status=?,left_at=IF(?='left',CURRENT_TIMESTAMP,left_at) WHERE id=?",[status,status,d.id]);await audit(i.user.id,"driver.status",u.id,status);return i.reply({content:`Updated <@${u.id}> status to **${status}**.`});}if(sub==="addmiles"){const miles=i.options.getNumber("miles",true);await db().execute("UPDATE drivers SET total_miles=total_miles+?,monthly_miles=monthly_miles+? WHERE id=?",[miles,miles,d.id]);await audit(i.user.id,"driver.addmiles",u.id,String(miles));return i.reply({content:`Added **${Number(miles).toLocaleString()} miles** to <@${u.id}>.`});}}
+
+export async function handleAchievementGive(i){const u=i.options.getUser("user",true);const d=await getDriver(u.id);if(!d)return i.reply({content:"That member does not have a Sterling driver profile yet.",flags:MessageFlags.Ephemeral});const name=i.options.getString("name",true).trim();const description=i.options.getString("description")?.trim()||null;await db().execute("INSERT INTO achievements(driver_id,name,description,awarded_by) VALUES(?,?,?,?)",[d.id,name,description,i.user.id]);await audit(i.user.id,"achievement.give",u.id,name);return i.reply({content:`🏆 Awarded **${name}** to <@${u.id}>.`});}
+export async function handleAchievements(i){const u=i.options.getUser("user")||i.user;const d=await getDriver(u.id);if(!d)return i.reply({content:"No Sterling driver profile found.",flags:MessageFlags.Ephemeral});const [rows]=await db().execute("SELECT name,description,awarded_at FROM achievements WHERE driver_id=? ORDER BY awarded_at DESC LIMIT 15",[d.id]);const text=rows.length?rows.map(r=>`🏆 **${r.name}**${r.description?` — ${r.description}`:""}`).join("\n"):"No achievements recorded yet.";return i.reply({embeds:[new EmbedBuilder().setTitle(`Achievements | ${d.sterling_driver_id}`).setDescription(text)]});}
