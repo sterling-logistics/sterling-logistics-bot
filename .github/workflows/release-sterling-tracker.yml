@@ -1,0 +1,80 @@
+name: Release Sterling Tracker
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'desktop/SterlingTracker.Desktop/**'
+      - 'installer/**'
+      - '.github/workflows/release-sterling-tracker.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore Sterling branding
+        shell: pwsh
+        run: |
+          $assetDir = '.\desktop\SterlingTracker.Desktop\Assets'
+          New-Item -ItemType Directory -Force -Path $assetDir | Out-Null
+          $encoded = "$assetDir\SterlingTracker.ico.b64"
+          $icon = "$assetDir\SterlingTracker.ico"
+          if (Test-Path $encoded) {
+            [IO.File]::WriteAllBytes($icon, [Convert]::FromBase64String((Get-Content $encoded -Raw).Trim()))
+          }
+          if (-not (Test-Path $icon)) { throw 'SterlingTracker.ico branding asset was not restored' }
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish Sterling Tracker
+        shell: pwsh
+        run: |
+          dotnet publish .\desktop\SterlingTracker.Desktop\SterlingTracker.Desktop.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:DebugType=None `
+            -p:DebugSymbols=false `
+            -o .\publish\SterlingTracker
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build driver installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path .\dist | Out-Null
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' .\installer\SterlingTracker.iss
+          if (-not (Test-Path '.\dist\SterlingTrackerSetup.exe')) { throw 'Installer was not created' }
+
+      - name: Upload driver installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DOWNLOAD-Sterling-Tracker
+          path: dist/SterlingTrackerSetup.exe
+
+      - name: Publish public v1.2 release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = 'tracker-v1.2.0'
+          $asset = '.\dist\SterlingTrackerSetup.exe'
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $asset --clobber
+          } else {
+            gh release create $tag $asset --target $env:GITHUB_SHA --title 'Sterling Tracker v1.2.0' --notes 'Official Sterling Logistics Windows driver tracker with Discord sign in automatic ETS2 detection live telemetry and branded Sterling dashboard'
+          }
