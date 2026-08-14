@@ -15,6 +15,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Restore Sterling app icon
+        shell: pwsh
+        run: |
+          $assetDir = '.\desktop\SterlingTracker.Desktop\Assets'
+          New-Item -ItemType Directory -Force -Path $assetDir | Out-Null
+          $b64 = Get-Content "$assetDir\SterlingTracker.ico.b64" -Raw
+          [IO.File]::WriteAllBytes("$assetDir\SterlingTracker.ico", [Convert]::FromBase64String($b64.Trim()))
+
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
@@ -43,14 +51,12 @@ jobs:
           New-Item -ItemType Directory -Force -Path .\dist | Out-Null
           & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' .\installer\SterlingTracker.iss
 
-      # Driver download — this is the only build we advertise publicly.
       - name: Upload driver installer
         uses: actions/upload-artifact@v4
         with:
           name: DOWNLOAD-Sterling-Tracker
           path: dist/SterlingTrackerSetup.exe
 
-      # Developer/testing copy — kept clearly separate from the driver installer.
       - name: Upload developer portable build
         uses: actions/upload-artifact@v4
         with:
