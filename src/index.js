@@ -16,7 +16,7 @@ import {createLoa} from "./loa/service.js";
 import {recordTraining} from "./training/service.js";
 import {createConvoy} from "./convoys/service.js";
 import {handleJobs} from "./jobs/service.js";
-import {ingestTelemetry,getLiveFleet,issueTrackerKey,authenticateTracker,ingestTrackerTelemetry} from "./telemetry/service.js";
+import {ingestTelemetry,getLiveFleet,issueTrackerKey,authenticateTracker,ingestTrackerTelemetry,handleDrivingStats} from "./telemetry/service.js";
 import {handleLeaderboard,handleCompanyStats,handleDriverAdmin,handleAchievementGive,handleAchievements} from "./operations/service.js";
 
 const envPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.env");
@@ -51,6 +51,7 @@ if(i.commandName==="deletehiddentickets")return handleDeleteHiddenTickets(i,c);
 if(i.commandName==="profile")return handleProfile(i);
 if(i.commandName==="jobs")return handleJobs(i);
 if(i.commandName==="trackerkey")return issueTrackerKey(i);
+if(i.commandName==="drivingstats")return handleDrivingStats(i);
 if(i.commandName==="leaderboard")return handleLeaderboard(i);
 if(i.commandName==="companystats")return handleCompanyStats(i);
 if(i.commandName==="driveradmin")return handleDriverAdmin(i);
@@ -63,6 +64,6 @@ if(i.commandName==="loa")return createLoa(i);
 if(i.commandName==="trainingpass")return recordTraining(i,"pass");
 if(i.commandName==="trainingfail")return recordTraining(i,"fail");
 if(i.commandName==="convoycreate")return createConvoy(i);
-if(i.commandName==="companylive"){const f=await getLiveFleet();const d=f.length?f.map(x=>`**${x.sterling_driver_id||x.discord_username||x.driver_id}** — ${x.truck||"Truck"} — ${Number(x.speed_mph||0).toFixed(0)} mph${x.cargo?` — ${x.cargo}`:""}${x.source_city||x.destination_city?` — ${x.source_city||"?"} → ${x.destination_city||"?"}`:""}`).join("\n"):"No Sterling Tracker sessions are currently online.";return i.reply({embeds:[new EmbedBuilder().setTitle("Sterling Logistics Live Operations").setDescription(d)]});}
+if(i.commandName==="companylive"){const f=await getLiveFleet();const d=f.length?f.map(x=>`**${x.sterling_driver_id||x.discord_username||x.driver_id}** — ${x.truck||"Truck"} — ${Number(x.speed_mph||0).toFixed(0)} mph${x.cargo?` — ${x.cargo}`:""}${x.source_city||x.destination_city?` — ${x.source_city||"?"} → ${x.destination_city||"?"}`:""} — ${(Number(x.driving_seconds||0)/3600).toFixed(1)}h — ${x.crashes||0} crashes — ${x.fuel_stops||0} fuel stops`).join("\n"):"No Sterling Tracker sessions are currently online.";return i.reply({embeds:[new EmbedBuilder().setTitle("Sterling Logistics Live Operations").setDescription(d)]});}
 const staff=new Set(["claim","ticketinfo","adduser","removeuser","rename","transcript","closeticket"]);if(staff.has(i.commandName)&&!isTicketStaff(i,c))return i.reply({content:"Only authorised Sterling Logistics staff can use this command.",flags:MessageFlags.Ephemeral});switch(i.commandName){case"claim":return handleClaim(i);case"ticketinfo":return handleTicketInfo(i);case"adduser":return handleAddUser(i);case"removeuser":return handleRemoveUser(i);case"rename":return handleRename(i);case"transcript":return handleTranscript(i,client,c);case"closeticket":return handleCloseTicket(i,client,c);}
 }catch(e){console.error("[Interaction]",e);const m=`Sterling Logistics Bot error\n\n${String(e.message||e).slice(0,1000)}`;try{if(i.deferred)await i.editReply(m);else if(i.replied)await i.followUp({content:m,flags:MessageFlags.Ephemeral});else await i.reply({content:m,flags:MessageFlags.Ephemeral});}catch{}}});client.on(Events.Error,e=>console.error("[Discord]",e));process.on("unhandledRejection",e=>console.error("[Node]",e));process.on("uncaughtException",e=>console.error("[Node]",e));client.login(c.token).catch(e=>{console.error("[Discord] Login failed",e);process.exit(1);});
