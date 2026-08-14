@@ -1,10 +1,12 @@
 import {ChannelType,EmbedBuilder} from "discord.js";
 
-let trackerEventsChannelId=null;
+const PREFERRED_TRACKER_EVENTS_CHANNEL_ID="1537772143683706890";
+let trackerEventsChannelId=PREFERRED_TRACKER_EVENTS_CHANNEL_ID;
 
 export async function ensureTrackerEventsChannel(guild){
   await guild.channels.fetch();
-  let ch=guild.channels.cache.find(c=>c.type===ChannelType.GuildText&&c.name==="tracker-events");
+  let ch=await guild.channels.fetch(PREFERRED_TRACKER_EVENTS_CHANNEL_ID).catch(()=>null);
+  if(!ch)ch=guild.channels.cache.find(c=>c.type===ChannelType.GuildText&&c.name==="tracker-events");
   if(!ch){
     ch=await guild.channels.create({name:"tracker-events",type:ChannelType.GuildText,topic:"Automatic Sterling Tracker events: jobs, fuel, rest stops and incidents."});
   }
