@@ -19,10 +19,7 @@ export async function sendReviewRequest(client,ticket){
         .setFooter({text:"Sterling Logistics | Driven by Excellence"})],
       components:[row]
     });
-    await db().execute("UPDATE tickets SET review_requested_at=NOW() WHERE id=?",[ticket.id]);
-  }catch(e){
-    console.warn(`[Reviews] Could not DM review request for ticket ${ticket.id}: ${e.message}`);
-  }
+  }catch(e){console.warn(`[Reviews] Could not DM review request for ticket ${ticket.id}: ${e.message}`);}
 }
 
 export async function handleReviewButton(i){
@@ -49,7 +46,7 @@ export async function handleReviewModal(i,client,c){
   if(!t)return i.reply({content:"That ticket could not be found.",flags:MessageFlags.Ephemeral});
   if(i.user.id!==t.owner_id)return i.reply({content:"Only the ticket owner can submit this review.",flags:MessageFlags.Ephemeral});
   if(t.reviewed_at)return i.reply({content:"This ticket has already been reviewed.",flags:MessageFlags.Ephemeral});
-  await db().execute("UPDATE tickets SET review_rating=?,review_text=?,reviewed_at=NOW() WHERE id=?",[rating,feedback||null,ticketId]);
+  await db().execute("UPDATE tickets SET review_rating=?,reviewed_at=NOW() WHERE id=?",[rating,ticketId]);
   await db().execute("INSERT INTO ticket_reviews(ticket_id,reviewer_discord_id,staff_discord_id,rating,review_text) VALUES(?,?,?,?,?)",[ticketId,i.user.id,t.claimed_by||t.closed_by||null,rating,feedback||null]);
   try{
     const ch=await client.channels.fetch(c.reviewsChannelId);
