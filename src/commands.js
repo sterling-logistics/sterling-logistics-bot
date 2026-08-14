@@ -1,4 +1,5 @@
 import {PermissionFlagsBits,REST,Routes,SlashCommandBuilder} from "discord.js";
+import {dispatchCommandData} from "./dispatch/commands.js";
 const admin=PermissionFlagsBits.Administrator;
 export function commandData(){return[
 new SlashCommandBuilder().setName("setupverify").setDescription("Post verification panel").setDefaultMemberPermissions(admin),
@@ -47,4 +48,4 @@ new SlashCommandBuilder().setName("trainingfail").setDescription("Record trainin
 new SlashCommandBuilder().setName("convoycreate").setDescription("Create convoy").setDefaultMemberPermissions(admin).addStringOption(o=>o.setName("name").setDescription("Name").setRequired(true)).addStringOption(o=>o.setName("date").setDescription("YYYY-MM-DD").setRequired(true)).addStringOption(o=>o.setName("departure").setDescription("Departure").setRequired(true)).addStringOption(o=>o.setName("destination").setDescription("Destination").setRequired(true)),
 new SlashCommandBuilder().setName("companylive").setDescription("Show live Sterling Tracker sessions")
 ].map(c=>c.toJSON())}
-export async function registerCommands(c){const r=new REST({version:"10"}).setToken(c.token);await r.put(Routes.applicationGuildCommands(c.applicationId,c.guildId),{body:commandData()});}
+export async function registerCommands(c){const r=new REST({version:"10"}).setToken(c.token);const all=[...commandData(),...dispatchCommandData()];await r.put(Routes.applicationGuildCommands(c.applicationId,c.guildId),{body:all});}
