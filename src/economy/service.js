@@ -2,7 +2,7 @@ import {db} from "../database/mysql.js";
 
 const num=v=>Number(v)||0;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-const DRIVER_PAY_RATE=0.20;
+const DRIVER_PAY_RATE=0.35;
 const FUEL_PRICE_PER_LITRE=1.70;
 let schemaPromise=null;
 
