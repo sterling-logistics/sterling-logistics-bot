@@ -1,4 +1,6 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import express from "express";
 import {Client,Events,GatewayIntentBits,MessageFlags,EmbedBuilder} from "discord.js";
 import {loadConfig} from "./config.js";
@@ -7,6 +9,12 @@ import {registerCommands} from "./commands.js";
 import {postVerificationPanel,handleVerify} from "./verification/service.js";
 import {postTicketPanel,openTicket,isTicketStaff,handleClaim,handleTicketInfo,handleAddUser,handleRemoveUser,handleRename,handleTranscript,handleCloseTicket,handleReview,handleTicketCleanup,handleDeleteHiddenTickets,handleManualChannelDelete,reconcileTickets} from "./tickets/service.js";
 import {handleProfile} from "./drivers/service.js";import {openApplicationModal,submitApplication,setApplicationStatus} from "./recruitment/service.js";import {createHrCase} from "./hr/service.js";import {createLoa} from "./loa/service.js";import {recordTraining} from "./training/service.js";import {createConvoy} from "./convoys/service.js";import {handleJobs} from "./jobs/service.js";import {ingestTelemetry,getLiveFleet} from "./telemetry/service.js";
+
+const envPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.env");
+const envResult = dotenv.config({ path: envPath });
+if (envResult.error) console.warn(`[Config] Could not load ${envPath}: ${envResult.error.message}`);
+else console.log(`[Config] Loaded environment from ${envPath}`);
+
 const c=loadConfig();initDatabase(c.db);const intents=[GatewayIntentBits.Guilds];if(c.enableMessageContentIntent)intents.push(GatewayIntentBits.MessageContent);const client=new Client({intents});
 const app=express();app.use(express.json({limit:"256kb"}));app.get("/",(_q,r)=>r.send("Sterling Logistics Bot API online"));app.get("/health",async(_q,r)=>{try{const d=await pingDatabase();r.json({ok:true,discord:client.isReady(),database:d.db});}catch(e){r.status(500).json({ok:false,error:String(e.message||e)})}});app.post("/api/telemetry",async(q,r)=>{try{if(!c.telemetryApiSecret)return r.status(503).json({ok:false,error:"Telemetry API not enabled"});if(q.headers.authorization!==`Bearer ${c.telemetryApiSecret}`)return r.status(401).json({ok:false,error:"Unauthorized"});r.json(await ingestTelemetry(q.body));}catch(e){r.status(400).json({ok:false,error:String(e.message||e)})}});app.listen(c.port,"0.0.0.0",()=>console.log(`[API] Listening on ${c.port}`));
 client.once(Events.ClientReady,async me=>{console.log(`[Discord] Logged in as ${me.user.tag}`);try{const d=await pingDatabase();console.log(`[DB] Connected to ${d.db} as ${d.username}`);await ensureSchema();console.log("[DB] MySQL schema ready");const g=await client.guilds.fetch(c.guildId);const x=await reconcileTickets(g);console.log(`[Tickets] Startup repair: ${x.valid} valid, ${x.stale} stale, ${x.duplicates} duplicate repaired`);await registerCommands(c);console.log("[Sterling] Bot ready");}catch(e){console.error("[Startup]",e);}});client.on(Events.ChannelDelete,handleManualChannelDelete);
