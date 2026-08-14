@@ -3,12 +3,13 @@ import {EmbedBuilder,MessageFlags} from "discord.js";
 import {db} from "../database/mysql.js";
 import {syncDispatchFromTelemetry} from "../dispatch/service.js";
 import {settleCompletedLoad,recordFuelExpense,recordFineExpense,calculateDriveScore,getDriverEconomy,economySettings} from "../economy/service.js";
+import {processDriverProgression} from "../progression/service.js";
 
 const hash=v=>crypto.createHash("sha256").update(String(v)).digest("hex");
 const safeJson=v=>JSON.parse(JSON.stringify(v,(k,x)=>typeof x==="bigint"?x.toString():x));
 const num=v=>Number(v)||0;
 const hours=s=>`${(num(s)/3600).toFixed(1)}h`;
-const money=v=>`€${num(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+const money=v=>`£${num(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 
 export async function issueTrackerKey(i){
   const[d]=await db().execute("SELECT id,sterling_driver_id FROM drivers WHERE discord_id=? AND status<>'left' LIMIT 1",[i.user.id]);
@@ -41,20 +42,14 @@ export async function ingestTrackerTelemetry(driverId,p){
 
   const[prevRows]=await db().execute("SELECT raw_json,last_seen_at FROM live_telemetry WHERE driver_id=? LIMIT 1",[driverId]);
   const prev=prevRows[0];
-  let prevData={};
-  try{prevData=typeof prev?.raw_json==="string"?JSON.parse(prev.raw_json):(prev?.raw_json||{});}catch{}
+  let prevData={};try{prevData=typeof prev?.raw_json==="string"?JSON.parse(prev.raw_json):(prev?.raw_json||{});}catch{}
 
-  const speedMps=num(data.speedMps??data.speed);
-  const speedMph=speedMps*2.2369362921;
-  const fuel=num(data.fuelLiters);
-  const prevFuel=num(prevData.fuelLiters);
-  const truckDamage=num(data.truckDamage);
-  const prevTruckDamage=num(prevData.truckDamage);
-  const odometerKm=num(data.odometerKm);
-  const prevOdometerKm=num(prevData.odometerKm);
+  const speedMps=num(data.speedMps??data.speed),speedMph=speedMps*2.2369362921;
+  const fuel=num(data.fuelLiters),prevFuel=num(prevData.fuelLiters);
+  const truckDamage=num(data.truckDamage),prevTruckDamage=num(prevData.truckDamage);
+  const odometerKm=num(data.odometerKm),prevOdometerKm=num(prevData.odometerKm);
   const engineOn=Boolean(data.engineOn);
-  let elapsed=0;
-  if(prev?.last_seen_at){elapsed=Math.max(0,Math.min(30,Math.round((Date.now()-new Date(prev.last_seen_at).getTime())/1000)));}
+  let elapsed=0;if(prev?.last_seen_at)elapsed=Math.max(0,Math.min(30,Math.round((Date.now()-new Date(prev.last_seen_at).getTime())/1000)));
   const milesDelta=(odometerKm>prevOdometerKm&&odometerKm-prevOdometerKm<20)?(odometerKm-prevOdometerKm)*0.621371:0;
   const fuelUsed=(prevFuel>fuel&&prevFuel-fuel<10)?prevFuel-fuel:0;
   const fuelAdded=(fuel>prevFuel&&fuel-prevFuel>=5&&speedMph<3)?fuel-prevFuel:0;
@@ -67,10 +62,7 @@ export async function ingestTrackerTelemetry(driverId,p){
       driverId,elapsed,speedMph>1?elapsed:0,engineOn&&speedMph<=1?elapsed:0,milesDelta,fuelUsed,fuelAdded,fuelAdded>0?1:0,crashDetected?1:0,eventType==="job-delivered"?1:0,speedMph
     ]);
 
-  if(fuelAdded>0){
-    const[fr]=await db().execute("INSERT INTO fuel_stops(driver_id,session_id,liters_added,fuel_before,fuel_after,latitude,longitude) VALUES(?,?,?,?,?,?,?)",[driverId,sessionId,fuelAdded,prevFuel,fuel,data.latitude??null,data.longitude??null]);
-    try{await recordFuelExpense(driverId,fuelAdded,sessionId,fr.insertId);}catch(e){console.error("[Economy Fuel]",e);}
-  }
+  if(fuelAdded>0){const[fr]=await db().execute("INSERT INTO fuel_stops(driver_id,session_id,liters_added,fuel_before,fuel_after,latitude,longitude) VALUES(?,?,?,?,?,?,?)",[driverId,sessionId,fuelAdded,prevFuel,fuel,data.latitude??null,data.longitude??null]);try{await recordFuelExpense(driverId,fuelAdded,sessionId,fr.insertId);}catch(e){console.error("[Economy Fuel]",e);}}
   if(crashDetected)await db().execute("INSERT INTO driver_incidents(driver_id,session_id,event_type,speed_mph,truck_damage_before,truck_damage_after,damage_delta,latitude,longitude,details_json) VALUES(?,?,?,?,?,?,?,?,?,?)",[driverId,sessionId,"crash",speedMph,prevTruckDamage,truckDamage,damageDelta,data.latitude??null,data.longitude??null,JSON.stringify({eventType,data})]);
   if(eventType==="fine"){try{await recordFineExpense(driverId,data,sessionId);}catch(e){console.error("[Economy Fine]",e);}}
 
@@ -79,63 +71,40 @@ export async function ingestTrackerTelemetry(driverId,p){
     ON DUPLICATE KEY UPDATE session_code=VALUES(session_code),status=VALUES(status),game=VALUES(game),truck=VALUES(truck),cargo=VALUES(cargo),source_city=VALUES(source_city),destination_city=VALUES(destination_city),speed_mph=VALUES(speed_mph),latitude=VALUES(latitude),longitude=VALUES(longitude),raw_json=VALUES(raw_json),last_seen_at=NOW()`,[
       driverId,sessionCode,status,data.game||"ETS2",data.truck||null,data.cargo||null,data.sourceCity||null,data.destinationCity||null,speedMph,data.latitude??null,data.longitude??null,JSON.stringify(data)
     ]);
-  let economy=null;
+
+  let economy=null,progression=null;
   if(eventType==="job-delivered"){
     const miles=(num(data.distanceKm||data.jobDeliveredDistanceKm))*0.621371;
     const income=num(data.revenue||data.jobDeliveredRevenue);
-    if(miles>0)await db().execute("UPDATE drivers SET total_miles=total_miles+?,monthly_miles=monthly_miles+?,jobs_completed=jobs_completed+1,total_income=total_income+? WHERE id=?",[miles,miles,income,driverId]);
+    await db().execute("UPDATE drivers SET total_miles=total_miles+?,monthly_miles=monthly_miles+?,jobs_completed=jobs_completed+1,total_income=total_income+? WHERE id=?",[Math.max(0,miles),Math.max(0,miles),income,driverId]);
     try{economy=await settleCompletedLoad(driverId,data,sessionId);}catch(e){console.error("[Economy Job]",e);}
-  }
+    try{progression=await processDriverProgression(driverId);}catch(e){console.error("[Progression]",e);}
+  }else if(["fine","job-cancelled","crash","collision"].includes(eventType)||crashDetected){try{progression=await processDriverProgression(driverId);}catch(e){console.error("[Progression]",e);}}
+
   let dispatch=null;try{dispatch=await syncDispatchFromTelemetry(driverId,eventType,data);}catch(e){console.error("[Dispatch Sync]",e);}
-  return{ok:true,sessionId,sessionBecameOnline,metrics:{elapsed,milesDelta,fuelUsed,fuelAdded,crashDetected,damageDelta},dispatch,economy};
+  return{ok:true,sessionId,sessionBecameOnline,metrics:{elapsed,milesDelta,fuelUsed,fuelAdded,crashDetected,damageDelta},dispatch,economy,progression};
 }
 
 export async function markStaleTrackerSessionsOffline(staleSeconds=90){
   const seconds=Math.max(30,Math.min(600,Number(staleSeconds)||90));
-  const[r]=await db().query(`SELECT ts.driver_id,MAX(ts.last_seen_at) last_seen_at,d.sterling_driver_id,d.discord_id,d.discord_username,lt.raw_json
-    FROM telemetry_sessions ts JOIN drivers d ON d.id=ts.driver_id LEFT JOIN live_telemetry lt ON lt.driver_id=ts.driver_id
-    WHERE ts.status<>'offline' GROUP BY ts.driver_id,d.sterling_driver_id,d.discord_id,d.discord_username,lt.raw_json
-    HAVING MAX(ts.last_seen_at)<DATE_SUB(NOW(),INTERVAL ${seconds} SECOND)`);
-  const out=[];
-  for(const x of r){
-    await db().execute(`UPDATE telemetry_sessions SET status='offline',ended_at=COALESCE(ended_at,NOW()) WHERE driver_id=? AND status<>'offline' AND last_seen_at<DATE_SUB(NOW(),INTERVAL ${seconds} SECOND)`,[x.driver_id]);
-    await db().execute("UPDATE live_telemetry SET status='offline' WHERE driver_id=?",[x.driver_id]);
-    let data={};try{data=typeof x.raw_json==="string"?JSON.parse(x.raw_json):(x.raw_json||{});}catch{}
-    out.push({driver_id:x.driver_id,sterling_driver_id:x.sterling_driver_id,discord_id:x.discord_id,discord_username:x.discord_username,last_seen_at:x.last_seen_at,data});
-  }
-  return out;
+  const[r]=await db().query(`SELECT ts.driver_id,MAX(ts.last_seen_at) last_seen_at,d.sterling_driver_id,d.discord_id,d.discord_username,lt.raw_json FROM telemetry_sessions ts JOIN drivers d ON d.id=ts.driver_id LEFT JOIN live_telemetry lt ON lt.driver_id=ts.driver_id WHERE ts.status<>'offline' GROUP BY ts.driver_id,d.sterling_driver_id,d.discord_id,d.discord_username,lt.raw_json HAVING MAX(ts.last_seen_at)<DATE_SUB(NOW(),INTERVAL ${seconds} SECOND)`);
+  const out=[];for(const x of r){await db().execute(`UPDATE telemetry_sessions SET status='offline',ended_at=COALESCE(ended_at,NOW()) WHERE driver_id=? AND status<>'offline' AND last_seen_at<DATE_SUB(NOW(),INTERVAL ${seconds} SECOND)`,[x.driver_id]);await db().execute("UPDATE live_telemetry SET status='offline' WHERE driver_id=?",[x.driver_id]);let data={};try{data=typeof x.raw_json==="string"?JSON.parse(x.raw_json):(x.raw_json||{});}catch{}out.push({...x,data});}return out;
 }
 
 export async function ingestTelemetry(p){const{driverId}=p;if(!driverId)throw new Error("driverId required");return ingestTrackerTelemetry(driverId,p);}
-
-export async function getLiveFleet(){const[r]=await db().query(`SELECT lt.*,d.sterling_driver_id,d.discord_username,dm.driving_seconds,dm.crashes,dm.fuel_stops FROM live_telemetry lt JOIN drivers d ON d.id=lt.driver_id LEFT JOIN driver_metrics dm ON dm.driver_id=d.id WHERE lt.status<>'offline' AND lt.last_seen_at >= (NOW()-INTERVAL 2 MINUTE) ORDER BY lt.last_seen_at DESC`);return r;}
+export async function getLiveFleet(){const[r]=await db().query(`SELECT lt.*,d.sterling_driver_id,d.discord_username,d.rank_name,dm.driving_seconds,dm.crashes,dm.fuel_stops FROM live_telemetry lt JOIN drivers d ON d.id=lt.driver_id LEFT JOIN driver_metrics dm ON dm.driver_id=d.id WHERE lt.status<>'offline' AND lt.last_seen_at >= (NOW()-INTERVAL 2 MINUTE) ORDER BY lt.last_seen_at DESC`);return r;}
 
 export async function handleDrivingStats(i){
   const u=i.options.getUser("user")||i.user;
-  const[r]=await db().execute(`SELECT d.id,d.sterling_driver_id,d.discord_id,d.discord_username,d.total_miles,d.jobs_completed,d.safety_score,dm.* FROM drivers d LEFT JOIN driver_metrics dm ON dm.driver_id=d.id WHERE d.discord_id=? LIMIT 1`,[u.id]);
-  const x=r[0];
-  if(!x)return i.reply({content:"No Sterling driver profile found.",flags:MessageFlags.Ephemeral});
-  const[f,score,econ]=await Promise.all([
-    db().execute("SELECT COUNT(*) incidents FROM driver_incidents WHERE driver_id=? AND occurred_at>=DATE_FORMAT(NOW(),'%Y-%m-01')",[x.id]),
-    calculateDriveScore(x.id),
-    getDriverEconomy(x.id)
-  ]);
+  const[r]=await db().execute(`SELECT d.id,d.sterling_driver_id,d.discord_id,d.discord_username,d.rank_name,d.total_miles,d.jobs_completed,d.safety_score,dm.* FROM drivers d LEFT JOIN driver_metrics dm ON dm.driver_id=d.id WHERE d.discord_id=? LIMIT 1`,[u.id]);
+  const x=r[0];if(!x)return i.reply({content:"No Sterling driver profile found.",flags:MessageFlags.Ephemeral});
+  const[f,score,econ]=await Promise.all([db().execute("SELECT COUNT(*) incidents FROM driver_incidents WHERE driver_id=? AND occurred_at>=DATE_FORMAT(NOW(),'%Y-%m-01')",[x.id]),calculateDriveScore(x.id),getDriverEconomy(x.id)]);
   await i.reply({embeds:[new EmbedBuilder().setTitle(`🚛 Driving Stats | ${x.sterling_driver_id}`).addFields(
-    {name:"DriveScore",value:`${score.score.toFixed(0)}/100`,inline:true},
-    {name:"Driving Hours",value:hours(x.driving_seconds),inline:true},
-    {name:"Online Hours",value:hours(x.total_online_seconds),inline:true},
-    {name:"Tracked Miles",value:Number(x.tracked_miles||0).toLocaleString(undefined,{maximumFractionDigits:1}),inline:true},
-    {name:"Fuel Used",value:`${Number(x.fuel_used_liters||0).toFixed(1)} L`,inline:true},
-    {name:"Fuel Stops",value:String(x.fuel_stops||0),inline:true},
-    {name:"Crashes",value:String(x.crashes||0),inline:true},
-    {name:"Crashes This Month",value:String(f[0]?.[0]?.incidents||0),inline:true},
-    {name:"Max Speed",value:`${Number(x.max_speed_mph||0).toFixed(1)} mph`,inline:true},
-    {name:"Tracked Jobs",value:String(x.jobs_tracked||0),inline:true},
-    {name:"Driver Balance",value:money(econ.balance),inline:true},
-    {name:"Load Pay Earned",value:money(econ.totalEarned),inline:true},
-    {name:"Tracked Revenue",value:money(econ.income),inline:true},
-    {name:"Tracked Expenses",value:money(econ.expenses),inline:true},
-    {name:"Net Contribution",value:money(econ.net),inline:true},
+    {name:"Rank",value:x.rank_name||"Trainee Driver",inline:true},{name:"DriveScore",value:`${score.score.toFixed(0)}/100`,inline:true},{name:"Driving Hours",value:hours(x.driving_seconds),inline:true},
+    {name:"Online Hours",value:hours(x.total_online_seconds),inline:true},{name:"Tracked Miles",value:Number(x.tracked_miles||0).toLocaleString(undefined,{maximumFractionDigits:1}),inline:true},{name:"Fuel Used",value:`${Number(x.fuel_used_liters||0).toFixed(1)} L`,inline:true},
+    {name:"Fuel Stops",value:String(x.fuel_stops||0),inline:true},{name:"Crashes",value:String(x.crashes||0),inline:true},{name:"Crashes This Month",value:String(f[0]?.[0]?.incidents||0),inline:true},
+    {name:"Max Speed",value:`${Number(x.max_speed_mph||0).toFixed(1)} mph`,inline:true},{name:"Tracked Jobs",value:String(x.jobs_tracked||0),inline:true},{name:"Driver Balance",value:money(econ.balance),inline:true},
+    {name:"Load Pay Earned",value:money(econ.totalEarned),inline:true},{name:"Tracked Revenue",value:money(econ.income),inline:true},{name:"Tracked Expenses",value:money(econ.expenses),inline:true},{name:"Net Contribution",value:money(econ.net),inline:true},
     {name:"Driver Pay Rate",value:`${Math.round(economySettings.driverPayRate*100)}% of completed load revenue`,inline:false}
-  ).setFooter({text:"Sterling Logistics Live Tracker • DriveScore uses the last 30 days"})]});
+  ).setFooter({text:"Sterling Logistics Live Tracker • ranks and DriveScore update automatically"})]});
 }
