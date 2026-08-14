@@ -46,7 +46,7 @@ function Max-Damage($raw) {
   return ($values | Measure-Object -Maximum).Maximum
 }
 
-function Send-Telemetry($eventType, $raw, $direct=$false) {
+function Send-Telemetry($eventType, $raw, $direct=$false, $gameTimeJump=0) {
   $speed = Get-Prop $raw @('TruckValues.CurrentValues.DashboardValues.Speed.Value','TruckValues.CurrentValues.DashboardValues.Speed.Kph')
   $speedIsKph = $null -eq (Get-Prop $raw @('TruckValues.CurrentValues.DashboardValues.Speed.Value'))
   $speedMps = As-Double $speed
@@ -72,6 +72,7 @@ function Send-Telemetry($eventType, $raw, $direct=$false) {
   $refuelAmount = Get-Prop $raw @('GamePlay.RefuelEvent.Amount')
   $fineAmount = Get-Prop $raw @('GamePlay.FinedEvent.Amount')
   $fineOffence = Get-Prop $raw @('GamePlay.FinedEvent.Offence')
+  $gameTime = Get-Prop $raw @('CommonValues.GameTime.Value')
 
   $data = [ordered]@{
     game = (Get-Prop $raw @('Game'))
@@ -93,6 +94,8 @@ function Send-Telemetry($eventType, $raw, $direct=$false) {
     cargoDamage = As-Double $cargoDamage
     engineOn = As-Bool $engineOn
     engineRpm = As-Double $rpm
+    gameTime = As-Double $gameTime
+    gameTimeJump = As-Double $gameTimeJump
     latitude = if ($null -ne $posX) { [double]$posX } else { $null }
     longitude = if ($null -ne $posZ) { [double]$posZ } else { $null }
     onJob = As-Bool (Get-Prop $raw @('SpecialEventsValues.OnJob'))
@@ -114,10 +117,11 @@ function Send-Telemetry($eventType, $raw, $direct=$false) {
 Write-Host 'Sterling Logistics Live Tracker'
 Write-Host "Telemetry source: $TelemetryUrl"
 Write-Host "Sterling API: $PostUrl"
-Write-Host 'Tracking hours, miles, jobs, fuel, damage, fines, tolls and live status.'
+Write-Host 'Tracking hours, miles, jobs, fuel, damage, fines, tolls, rest stops and live status.'
 Write-Host ''
 
 $lastOnJob = $false
+$lastGameTime = $null
 $lastFlags = @{}
 foreach($n in @('JobDelivered','JobCancelled','Refuel','RefuelPayed','Fined','Tollgate','Ferry','Train')) { $lastFlags[$n]=$false }
 
@@ -133,6 +137,12 @@ while ($true) {
     $onJob = As-Bool (Get-Prop $raw @('SpecialEventsValues.OnJob'))
     $event = 'heartbeat'
     $direct = $false
+    $gameTime = As-Double (Get-Prop $raw @('CommonValues.GameTime.Value'))
+    $gameTimeJump = 0.0
+    if ($null -ne $lastGameTime -and $gameTime -gt 0) {
+      $gameTimeJump = $gameTime - $lastGameTime
+      if ($gameTimeJump -lt 0) { $gameTimeJump = 0 }
+    }
 
     $eventMap = [ordered]@{
       JobDelivered = 'job-delivered'
@@ -150,13 +160,18 @@ while ($true) {
       if ($now -and -not $lastFlags[$key]) { $event=$eventMap[$key]; $direct=$true; break }
     }
 
+    if (-not $direct -and $gameTimeJump -ge 120) {
+      $event='rest-stop'; $direct=$true
+    }
+
     if (-not $direct) {
       if ($onJob -and -not $lastOnJob) { $event='job-started'; $direct=$true }
       elseif (-not $onJob -and $lastOnJob) { $event='job-ended'; $direct=$true }
     }
 
-    Send-Telemetry $event $raw $direct
+    Send-Telemetry $event $raw $direct $gameTimeJump
     $lastOnJob = $onJob
+    if ($gameTime -gt 0) { $lastGameTime = $gameTime }
     foreach($key in $eventMap.Keys) { $lastFlags[$key] = As-Bool (Get-Prop $raw @("SpecialEventsValues.$key")) }
     Write-Host ("[{0}] sent {1}" -f (Get-Date -Format 'HH:mm:ss'),$event)
   } catch {
