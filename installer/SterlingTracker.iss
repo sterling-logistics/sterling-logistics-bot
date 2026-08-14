@@ -1,5 +1,5 @@
 #define MyAppName "Sterling Tracker"
-#define MyAppVersion "1.1.0"
+#define MyAppVersion "1.2.0"
 #define MyAppPublisher "Sterling Logistics"
 #define MyAppExeName "SterlingTracker.exe"
 
@@ -24,6 +24,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName="Sterling Tracker"
+SetupIconFile=..\desktop\SterlingTracker.Desktop\Assets\SterlingTracker.ico
 SetupLogging=yes
 
 [Files]
