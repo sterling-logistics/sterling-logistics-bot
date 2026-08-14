@@ -26,6 +26,16 @@ export async function ensureEconomySchema(){
       details_json JSON,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       INDEX(driver_id,created_at),INDEX(type,category,created_at))`);
+    await db().query(`CREATE TABLE IF NOT EXISTS ets2_payouts(
+      id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      driver_id BIGINT UNSIGNED NOT NULL,
+      amount DECIMAL(16,2) NOT NULL,
+      status VARCHAR(30) NOT NULL DEFAULT 'pending',
+      requested_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      applied_at TIMESTAMP NULL,
+      save_path VARCHAR(500),
+      error_text VARCHAR(1000),
+      INDEX(driver_id,status,requested_at))`);
   })();
   try{await schemaPromise;}catch(e){schemaPromise=null;throw e;}
 }
@@ -37,10 +47,7 @@ async function addLedger(driverId,type,amount,category,referenceKey,details={}){
   try{
     await db().execute("INSERT INTO economy_transactions(driver_id,type,amount,category,reference_key,details_json) VALUES(?,?,?,?,?,?)",[driverId,type,value,category,referenceKey,JSON.stringify(details)]);
     return {inserted:true,amount:value};
-  }catch(e){
-    if(e.code==="ER_DUP_ENTRY")return {inserted:false,amount:value};
-    throw e;
-  }
+  }catch(e){if(e.code==="ER_DUP_ENTRY")return {inserted:false,amount:value};throw e;}
 }
 
 export async function settleCompletedLoad(driverId,data,sessionId){
@@ -57,43 +64,32 @@ export async function settleCompletedLoad(driverId,data,sessionId){
   return {credited:true,payment,revenue,rate:DRIVER_PAY_RATE};
 }
 
-export async function recordFuelExpense(driverId,liters,sessionId,fuelStopId){
-  const l=Math.max(0,num(liters));
-  const amount=Math.round(l*FUEL_PRICE_PER_LITRE*100)/100;
-  return addLedger(driverId,"expense",amount,"fuel",`fuel:${fuelStopId||`${sessionId}:${Date.now()}`}`,{liters:l,pricePerLitre:FUEL_PRICE_PER_LITRE});
-}
-
-export async function recordFineExpense(driverId,data,sessionId){
-  const amount=Math.max(0,num(data.fineAmount||data.fine_amount||data.amount));
-  if(!amount)return {inserted:false,amount:0};
-  const key=`fine:${sessionId}:${String(data.fineOffence||data.offence||"unknown").slice(0,80)}:${Math.round(amount)}:${String(data.gameTime||data.gameTimeMinutes||"")}`;
-  return addLedger(driverId,"expense",amount,"fine",key,{offence:data.fineOffence||data.offence||"Unknown"});
-}
-
-export async function calculateDriveScore(driverId){
-  const[[crashRow],[eventRows]] = await Promise.all([
-    db().execute("SELECT COUNT(*) crashes FROM driver_incidents WHERE driver_id=? AND occurred_at>=DATE_SUB(NOW(),INTERVAL 30 DAY)",[driverId]),
-    db().execute(`SELECT SUM(event_type='fine') fines,SUM(event_type='job-cancelled') cancellations,SUM(event_type='job-delivered') deliveries FROM telemetry_events WHERE driver_id=? AND occurred_at>=DATE_SUB(NOW(),INTERVAL 30 DAY)`,[driverId])
-  ]);
-  const crashes=num(crashRow[0]?.crashes),fines=num(eventRows[0]?.fines),cancellations=num(eventRows[0]?.cancellations),deliveries=num(eventRows[0]?.deliveries);
-  const score=clamp(100-(crashes*8)-(fines*3)-(cancellations*2),0,100);
-  return {score,crashes,fines,cancellations,deliveries};
-}
-
-export async function getDriverEconomy(driverId){
+export async function requestEts2Withdrawal(driverId,amount){
   await ensureEconomySchema();
-  const[[walletRows],[ledgerRows]]=await Promise.all([
-    db().execute("SELECT balance,total_earned,total_withdrawn,paid_jobs FROM driver_wallets WHERE driver_id=? LIMIT 1",[driverId]),
-    db().execute(`SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount ELSE 0 END),0) income,COALESCE(SUM(CASE WHEN type='expense' THEN amount ELSE 0 END),0) expenses FROM economy_transactions WHERE driver_id=?`,[driverId])
-  ]);
-  const w=walletRows[0]||{};const l=ledgerRows[0]||{};
-  return {balance:num(w.balance),totalEarned:num(w.total_earned),totalWithdrawn:num(w.total_withdrawn),paidJobs:num(w.paid_jobs),income:num(l.income),expenses:num(l.expenses),net:num(l.income)-num(l.expenses)};
+  const value=Math.round(Math.max(0,num(amount))*100)/100;
+  if(value<=0)throw new Error("Withdrawal amount must be greater than zero.");
+  const conn=await db().getConnection();
+  try{
+    await conn.beginTransaction();
+    const[w]=await conn.execute("SELECT balance FROM driver_wallets WHERE driver_id=? FOR UPDATE",[driverId]);
+    const balance=num(w[0]?.balance);
+    if(balance<value)throw new Error(`Insufficient Sterling wallet balance. Available: £${balance.toFixed(2)}`);
+    await conn.execute("UPDATE driver_wallets SET balance=balance-? WHERE driver_id=?",[value,driverId]);
+    const[r]=await conn.execute("INSERT INTO ets2_payouts(driver_id,amount,status) VALUES(?,?,'pending')",[driverId,value]);
+    await conn.execute("INSERT INTO economy_transactions(driver_id,type,amount,category,reference_key,details_json) VALUES(?,?,?,?,?,?)",[driverId,"expense",value,"ets2_withdrawal",`ets2-withdrawal:${r.insertId}`,JSON.stringify({payoutId:r.insertId})]);
+    await conn.commit();
+    return{id:r.insertId,amount:value,balance:balance-value};
+  }catch(e){await conn.rollback();throw e;}finally{conn.release();}
 }
 
-export async function getCompanyEconomy(){
-  await ensureEconomySchema();
-  const[r]=await db().query(`SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount ELSE 0 END),0) income,COALESCE(SUM(CASE WHEN type='expense' THEN amount ELSE 0 END),0) expenses,COALESCE(SUM(CASE WHEN category='driver_payment' THEN amount ELSE 0 END),0) driver_payments,COALESCE(SUM(CASE WHEN category='fuel' THEN amount ELSE 0 END),0) fuel,COALESCE(SUM(CASE WHEN category='fine' THEN amount ELSE 0 END),0) fines FROM economy_transactions`);
-  const x=r[0]||{};return {income:num(x.income),expenses:num(x.expenses),net:num(x.income)-num(x.expenses),driverPayments:num(x.driver_payments),fuel:num(x.fuel),fines:num(x.fines)};
-}
+export async function getPendingEts2Payout(driverId){await ensureEconomySchema();const[r]=await db().execute("SELECT id,amount,requested_at FROM ets2_payouts WHERE driver_id=? AND status='pending' ORDER BY requested_at ASC LIMIT 1",[driverId]);return r[0]||null;}
+export async function completeEts2Payout(driverId,payoutId,savePath){await ensureEconomySchema();const[r]=await db().execute("UPDATE ets2_payouts SET status='applied',applied_at=NOW(),save_path=?,error_text=NULL WHERE id=? AND driver_id=? AND status='pending'",[String(savePath||'').slice(0,500),payoutId,driverId]);if(r.affectedRows){await db().execute("UPDATE driver_wallets SET total_withdrawn=total_withdrawn+(SELECT amount FROM ets2_payouts WHERE id=?) WHERE driver_id=?",[payoutId,driverId]);}return r.affectedRows>0;}
+export async function failEts2Payout(driverId,payoutId,errorText){await ensureEconomySchema();await db().execute("UPDATE ets2_payouts SET error_text=? WHERE id=? AND driver_id=? AND status='pending'",[String(errorText||'Unknown error').slice(0,1000),payoutId,driverId]);}
 
+export async function recordFuelExpense(driverId,liters,sessionId,fuelStopId){const l=Math.max(0,num(liters));const amount=Math.round(l*FUEL_PRICE_PER_LITRE*100)/100;return addLedger(driverId,"expense",amount,"fuel",`fuel:${fuelStopId||`${sessionId}:${Date.now()}`}`,{liters:l,pricePerLitre:FUEL_PRICE_PER_LITRE});}
+export async function recordFineExpense(driverId,data,sessionId){const amount=Math.max(0,num(data.fineAmount||data.fine_amount||data.amount));if(!amount)return {inserted:false,amount:0};const key=`fine:${sessionId}:${String(data.fineOffence||data.offence||"unknown").slice(0,80)}:${Math.round(amount)}:${String(data.gameTime||data.gameTimeMinutes||"")}`;return addLedger(driverId,"expense",amount,"fine",key,{offence:data.fineOffence||data.offence||"Unknown"});}
+
+export async function calculateDriveScore(driverId){const[[crashRow],[eventRows]]=await Promise.all([db().execute("SELECT COUNT(*) crashes FROM driver_incidents WHERE driver_id=? AND occurred_at>=DATE_SUB(NOW(),INTERVAL 30 DAY)",[driverId]),db().execute(`SELECT SUM(event_type='fine') fines,SUM(event_type='job-cancelled') cancellations,SUM(event_type='job-delivered') deliveries FROM telemetry_events WHERE driver_id=? AND occurred_at>=DATE_SUB(NOW(),INTERVAL 30 DAY)`,[driverId])]);const crashes=num(crashRow[0]?.crashes),fines=num(eventRows[0]?.fines),cancellations=num(eventRows[0]?.cancellations),deliveries=num(eventRows[0]?.deliveries);const score=clamp(100-(crashes*8)-(fines*3)-(cancellations*2),0,100);return {score,crashes,fines,cancellations,deliveries};}
+export async function getDriverEconomy(driverId){await ensureEconomySchema();const[[walletRows],[ledgerRows]]=await Promise.all([db().execute("SELECT balance,total_earned,total_withdrawn,paid_jobs FROM driver_wallets WHERE driver_id=? LIMIT 1",[driverId]),db().execute(`SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount ELSE 0 END),0) income,COALESCE(SUM(CASE WHEN type='expense' THEN amount ELSE 0 END),0) expenses FROM economy_transactions WHERE driver_id=?`,[driverId])]);const w=walletRows[0]||{},l=ledgerRows[0]||{};return {balance:num(w.balance),totalEarned:num(w.total_earned),totalWithdrawn:num(w.total_withdrawn),paidJobs:num(w.paid_jobs),income:num(l.income),expenses:num(l.expenses),net:num(l.income)-num(l.expenses)};}
+export async function getCompanyEconomy(){await ensureEconomySchema();const[r]=await db().query(`SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount ELSE 0 END),0) income,COALESCE(SUM(CASE WHEN type='expense' THEN amount ELSE 0 END),0) expenses,COALESCE(SUM(CASE WHEN category='driver_payment' THEN amount ELSE 0 END),0) driver_payments,COALESCE(SUM(CASE WHEN category='fuel' THEN amount ELSE 0 END),0) fuel,COALESCE(SUM(CASE WHEN category='fine' THEN amount ELSE 0 END),0) fines FROM economy_transactions`);const x=r[0]||{};return {income:num(x.income),expenses:num(x.expenses),net:num(x.income)-num(x.expenses),driverPayments:num(x.driver_payments),fuel:num(x.fuel),fines:num(x.fines)};}
 export const economySettings={driverPayRate:DRIVER_PAY_RATE,fuelPricePerLitre:FUEL_PRICE_PER_LITRE};
