@@ -1,0 +1,56 @@
+name: Build Sterling Tracker
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'desktop/SterlingTracker.Desktop/**'
+      - 'installer/**'
+      - '.github/workflows/build-sterling-tracker.yml'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish self-contained Windows app
+        shell: pwsh
+        run: |
+          dotnet publish .\desktop\SterlingTracker.Desktop\SterlingTracker.Desktop.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:DebugType=None `
+            -p:DebugSymbols=false `
+            -o .\publish\SterlingTracker
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path .\dist | Out-Null
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' .\installer\SterlingTracker.iss
+
+      - name: Upload portable build
+        uses: actions/upload-artifact@v4
+        with:
+          name: SterlingTracker-portable-win-x64
+          path: publish/SterlingTracker/**
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: SterlingTrackerSetup
+          path: dist/SterlingTrackerSetup.exe
