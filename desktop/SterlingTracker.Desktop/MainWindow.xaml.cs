@@ -1,9 +1,9 @@
 using System.Diagnostics;
+using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Windows;
-using Microsoft.Win32;
 
 namespace SterlingTracker.Desktop;
 public partial class MainWindow : Window
@@ -18,7 +18,7 @@ public partial class MainWindow : Window
     void LoadSettings(){try{if(File.Exists(settingsPath)){var s=JsonSerializer.Deserialize<Settings>(File.ReadAllText(settingsPath));trackerKey=s?.TrackerKey??"";}}catch{} }
     void SaveSettings(){Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);File.WriteAllText(settingsPath,JsonSerializer.Serialize(new Settings{TrackerKey=trackerKey}));}
 
-    async Task Loop(){while(running){try{var gameRunning=Process.GetProcessesByName("eurotrucks2").Length>0;if(!gameRunning){StatusText.Text="○ ETS2 Offline";GameText.Text="Launch Euro Truck Simulator 2 to begin tracking";await Task.Delay(3000);continue;}var raw=await http.GetStringAsync(TelemetryUrl);using var doc=JsonDocument.Parse(raw);var d=doc.RootElement;StatusText.Text=trackerKey.Length>10?"● Tracking":"● ETS2 detected — tracker key required";GameText.Text="Euro Truck Simulator 2 detected";UpdateUi(d);if(trackerKey.Length>10)await Send(d,raw);}
+    async Task Loop(){while(running){try{var gameRunning=Process.GetProcessesByName("eurotrucks2").Length>0;if(!gameRunning){StatusText.Text="○ ETS2 Offline";GameText.Text="Launch Euro Truck Simulator 2 to begin tracking";await Task.Delay(3000);continue;}var raw=await http.GetStringAsync(TelemetryUrl);using var doc=JsonDocument.Parse(raw);var d=doc.RootElement;StatusText.Text=trackerKey.Length>10?"● Tracking":"● ETS2 detected — tracker key required";GameText.Text="Euro Truck Simulator 2 detected";UpdateUi(d);if(trackerKey.Length>10)await Send(d);}
         catch{StatusText.Text="○ Waiting for telemetry";GameText.Text="ETS2 is running but localhost:6969 is not responding";}await Task.Delay(5000);}}
 
     void UpdateUi(JsonElement d){
@@ -30,7 +30,7 @@ public partial class MainWindow : Window
         var source=Find(d,"job.sourceCity");var dest=Find(d,"job.destinationCity");RouteText.Text=$"{(source.Length>0?source:"—")} → {(dest.Length>0?dest:"—")}";
     }
 
-    async Task Send(JsonElement d,string raw){
+    async Task Send(JsonElement d){
         var data=new Dictionary<string,object?>{
             ["game"]="ETS2",["truck"]=(Find(d,"truck.make")+" "+Find(d,"truck.model")).Trim(),["speedMps"]=Num(d,"truck.speed"),["fuelLiters"]=Num(d,"truck.fuel"),["odometerKm"]=Num(d,"truck.odometer"),["truckDamage"]=AverageDamage(d),["engineOn"]=Bool(d,"truck.engineOn"),["cargo"]=First(Find(d,"trailer.name"),Find(d,"job.cargo")),["sourceCity"]=Find(d,"job.sourceCity"),["destinationCity"]=Find(d,"job.destinationCity")};
         var body=JsonSerializer.Serialize(new{sessionCode,status="online",eventType="heartbeat",data});using var req=new HttpRequestMessage(HttpMethod.Post,ApiUrl);req.Headers.Authorization=new AuthenticationHeaderValue("Bearer",trackerKey);req.Content=new StringContent(body,Encoding.UTF8,"application/json");var res=await http.SendAsync(req);FooterText.Text=res.IsSuccessStatusCode?"Connected to Sterling • Live telemetry uploading":"Sterling API error: "+(int)res.StatusCode;
