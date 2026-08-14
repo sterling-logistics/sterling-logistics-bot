@@ -3,6 +3,7 @@ import {ChannelType,EmbedBuilder} from "discord.js";
 let trackerEventsChannelId=null;
 
 export async function ensureTrackerEventsChannel(guild){
+  await guild.channels.fetch();
   let ch=guild.channels.cache.find(c=>c.type===ChannelType.GuildText&&c.name==="tracker-events");
   if(!ch){
     ch=await guild.channels.create({name:"tracker-events",type:ChannelType.GuildText,topic:"Automatic Sterling Tracker events: jobs, fuel, rest stops and incidents."});
@@ -33,7 +34,7 @@ export async function postTrackerEvent(client,guildId,driver,event){
       case "rest-stop":
         title="🛏️ Rest Stop";description=`**${who}** took a rest/sleep stop in ETS2.`;fields=[{name:"Truck",value:d.truck||"Unknown",inline:true},{name:"Game Time Jump",value:`${Math.round(Number(d.gameTimeJump)||0)} game min`,inline:true}];break;
       case "crash":
-        title="💥 Crash / Damage Detected";description=`**${who}** had a new damage event.`;fields=[{name:"Speed",value:`${f(event.speedMph)} mph`,inline:true},{name:"Damage Increase",value:`${f((Number(event.damageDelta)||0)*100,2)}%`,inline:true},{name:"Truck Damage",value:`${f((Number(d.truckDamage)||0)*100)}%`,inline:true}];break;
+        title="💥 Crash / Damage Detected";description=`**${who}** had a new damage event.`;fields=[{name:"Speed",value:`${f(event.speedMph)} mph`,inline:true},{name:"Truck Damage",value:`${f((Number(d.truckDamage)||0)*100)}%`,inline:true}];break;
       default:return;
     }
     const e=new EmbedBuilder().setTitle(title).setDescription(description).addFields(fields).setTimestamp().setFooter({text:"Sterling Logistics Automatic Tracker"});
