@@ -21,11 +21,15 @@ export async function ensureTrackerChannels(guild){
   const roles=[...roleMatches(guild).values()];const parent=await staffCategory(guild);
   let events=await guild.channels.fetch(PREFERRED_TRACKER_EVENTS_CHANNEL_ID).catch(()=>null);
   if(!events)events=guild.channels.cache.find(c=>c.type===ChannelType.GuildText&&c.name===EVENT_CHANNEL_NAME);
-  if(!events)events=await guild.channels.create({name:EVENT_CHANNEL_NAME,type:ChannelType.GuildText,parent:parent?.id,topic:"Job starts/completions/cancellations, fuel stops and fines.",permissionOverwrites:hiddenOverwrites(guild,roles)});
-  await applyHiddenStaffAccess(events,guild,roles,parent);await events.setTopic("Job starts/completions/cancellations, fuel stops and fines.").catch(()=>{});trackerEventsChannelId=events.id;
+  if(!events){
+    try{events=await guild.channels.create({name:EVENT_CHANNEL_NAME,type:ChannelType.GuildText,parent:parent?.id,topic:"Job starts/completions/cancellations, fuel stops and fines.",permissionOverwrites:hiddenOverwrites(guild,roles)});}catch(err){console.warn("[Tracker Channels] Could not create tracker-events:",err?.code||err?.message||err);}
+  }
+  if(events){await applyHiddenStaffAccess(events,guild,roles,parent);await events.setTopic("Job starts/completions/cancellations, fuel stops and fines.").catch(()=>{});trackerEventsChannelId=events.id;}
   let status=guild.channels.cache.find(c=>c.type===ChannelType.GuildText&&c.name===STATUS_CHANNEL_NAME&&(!parent||c.parentId===parent.id));
-  if(!status)status=await guild.channels.create({name:STATUS_CHANNEL_NAME,type:ChannelType.GuildText,parent:parent?.id,topic:"Complete hidden Sterling driver activity feed, including online/offline and all tracker events.",permissionOverwrites:hiddenOverwrites(guild,roles)});
-  await applyHiddenStaffAccess(status,guild,roles,parent);await status.setTopic("Complete hidden Sterling driver activity feed, including online/offline and all tracker events.").catch(()=>{});driverStatusChannelId=status.id;
+  if(!status){
+    try{status=await guild.channels.create({name:STATUS_CHANNEL_NAME,type:ChannelType.GuildText,parent:parent?.id,topic:"Complete hidden Sterling driver activity feed, including online/offline and all tracker events.",permissionOverwrites:hiddenOverwrites(guild,roles)});}catch(err){console.warn("[Tracker Channels] Could not create driver-status:",err?.code||err?.message||err);}
+  }
+  if(status){await applyHiddenStaffAccess(status,guild,roles,parent);await status.setTopic("Complete hidden Sterling driver activity feed, including online/offline and all tracker events.").catch(()=>{});driverStatusChannelId=status.id;}
   return{events,status,roles};
 }
 export async function ensureTrackerEventsChannel(guild){return (await ensureTrackerChannels(guild)).events;}
@@ -55,6 +59,7 @@ export async function postTrackerPresence(client,guildId,driver,event){
   if(!event||!["driver-online","driver-offline"].includes(event.type))return;
   try{
     const guild=await client.guilds.fetch(guildId);const setup=await ensureTrackerChannels(guild);const ch=driverStatusChannelId?await guild.channels.fetch(driverStatusChannelId).catch(()=>null):setup.status;
+    if(!ch)return;
     const d=event.data||{};const online=event.type==="driver-online";const title=online?"🟢 Driver Loaded ETS2":"🔴 Driver Left ETS2";const description=online?`**${who(driver)}** is now connected to the Sterling Tracker.`:`**${who(driver)}** is no longer connected to the Sterling Tracker.`;const fields=[];
     if(d.truck)fields.push({name:"Truck",value:String(d.truck),inline:true});if(d.cargo)fields.push({name:"Cargo",value:String(d.cargo),inline:true});if(d.sourceCity||d.destinationCity)fields.push({name:"Route",value:route(d),inline:false});if(!online&&event.lastSeenAt)fields.push({name:"Last Seen",value:`<t:${Math.floor(new Date(event.lastSeenAt).getTime()/1000)}:R>`,inline:true});
     const e=new EmbedBuilder().setTitle(title).setDescription(description).setTimestamp().setFooter({text:"Sterling Logistics Staff Tracker"});if(fields.length)e.addFields(fields);
@@ -67,10 +72,10 @@ export async function postTrackerEvent(client,guildId,driver,event){
   try{
     const guild=await client.guilds.fetch(guildId);const setup=await ensureTrackerChannels(guild);
     const statusCh=driverStatusChannelId?await guild.channels.fetch(driverStatusChannelId).catch(()=>null):setup.status;
-    const statusEmbed=buildActivityEmbed(driver,event,"Sterling Logistics Complete Driver Log");if(statusEmbed)await statusCh.send({embeds:[statusEmbed]});
+    const statusEmbed=buildActivityEmbed(driver,event,"Sterling Logistics Complete Driver Log");if(statusCh&&statusEmbed)await statusCh.send({embeds:[statusEmbed]});
     if(TRACKER_EVENTS_VISIBLE.has(event.type)){
       const eventCh=trackerEventsChannelId?await guild.channels.fetch(trackerEventsChannelId).catch(()=>null):setup.events;
-      const eventEmbed=buildActivityEmbed(driver,event,"Sterling Logistics Tracker Events");if(eventEmbed)await eventCh.send({embeds:[eventEmbed]});
+      const eventEmbed=buildActivityEmbed(driver,event,"Sterling Logistics Tracker Events");if(eventCh&&eventEmbed)await eventCh.send({embeds:[eventEmbed]});
     }
   }catch(err){console.error("[Tracker Events]",err);}
 }
