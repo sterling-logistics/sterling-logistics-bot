@@ -17,7 +17,7 @@ import {recordTraining} from "./training/service.js";
 import {createConvoy} from "./convoys/service.js";
 import {handleJobs} from "./jobs/service.js";
 import {ingestTelemetry,getLiveFleet,issueTrackerKey,authenticateTracker,ingestTrackerTelemetry,handleDrivingStats} from "./telemetry/service.js";
-import {handleLeaderboard,handleCompanyStats,handleDriverAdmin,handleAchievementGive,handleAchievements} from "./operations/service.js";
+import {handleLeaderboard,handleCompanyStats,handleDriverAdmin,handleAchievementGive,handleAchievements,handleOwnerStatus,handleOwnerBootstrap,handleDriverCreate,handleDriverList,handleDriverLookup,handleSetDepartment,handleSetTruckersMp,handleSetSteam,handleSetCountry,handleSetTimezone,handleSetSafety,handleSetMiles,handleAddJobs,handleTrackerStatus,handleRevokeTracker,handleIncidentHistory,handleFuelHistory} from "./operations/service.js";
 
 const envPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.env");
 const envResult = dotenv.config({ path: envPath });
@@ -33,16 +33,8 @@ app.post("/api/tracker/telemetry",async(q,r)=>{try{const auth=String(q.headers.a
 app.listen(c.port,"0.0.0.0",()=>console.log(`[API] Listening on ${c.port}`));
 client.once(Events.ClientReady,async me=>{console.log(`[Discord] Logged in as ${me.user.tag}`);try{const d=await pingDatabase();console.log(`[DB] Connected to ${d.db} as ${d.username}`);await ensureSchema();console.log("[DB] MySQL schema ready");const g=await client.guilds.fetch(c.guildId);const x=await reconcileTickets(g);console.log(`[Tickets] Startup repair: ${x.valid} valid, ${x.stale} stale, ${x.duplicates} duplicate repaired`);await registerCommands(c);console.log("[Sterling] Bot ready");}catch(e){console.error("[Startup]",e);}});client.on(Events.ChannelDelete,handleManualChannelDelete);
 client.on(Events.InteractionCreate,async i=>{try{
-if(i.isModalSubmit()){
-  if(i.customId==="sterling_application_modal")return submitApplication(i);
-  if(i.customId.startsWith("sterling_review_modal:"))return handleReviewModal(i,client,c);
-}
-if(i.isButton()){
-  if(i.customId==="sterling_verify")return handleVerify(i,c);
-  if(i.customId==="sterling_open_ticket")return openTicket(i,client,c);
-  if(i.customId.startsWith("sterling_review:"))return handleReviewButton(i);
-  return;
-}
+if(i.isModalSubmit()){if(i.customId==="sterling_application_modal")return submitApplication(i);if(i.customId.startsWith("sterling_review_modal:"))return handleReviewModal(i,client,c);}
+if(i.isButton()){if(i.customId==="sterling_verify")return handleVerify(i,c);if(i.customId==="sterling_open_ticket")return openTicket(i,client,c);if(i.customId.startsWith("sterling_review:"))return handleReviewButton(i);return;}
 if(!i.isChatInputCommand())return;
 if(i.commandName==="setupverify")return postVerificationPanel(i);
 if(i.commandName==="setuptickets")return postTicketPanel(i);
@@ -57,6 +49,23 @@ if(i.commandName==="companystats")return handleCompanyStats(i);
 if(i.commandName==="driveradmin")return handleDriverAdmin(i);
 if(i.commandName==="achievementgive")return handleAchievementGive(i);
 if(i.commandName==="achievements")return handleAchievements(i);
+if(i.commandName==="ownerstatus")return handleOwnerStatus(i);
+if(i.commandName==="ownerbootstrap")return handleOwnerBootstrap(i);
+if(i.commandName==="drivercreate")return handleDriverCreate(i);
+if(i.commandName==="driverlist")return handleDriverList(i);
+if(i.commandName==="driverlookup")return handleDriverLookup(i);
+if(i.commandName==="setdepartment")return handleSetDepartment(i);
+if(i.commandName==="settruckersmp")return handleSetTruckersMp(i);
+if(i.commandName==="setsteam")return handleSetSteam(i);
+if(i.commandName==="setcountry")return handleSetCountry(i);
+if(i.commandName==="settimezone")return handleSetTimezone(i);
+if(i.commandName==="setsafety")return handleSetSafety(i);
+if(i.commandName==="setmiles")return handleSetMiles(i);
+if(i.commandName==="addjobs")return handleAddJobs(i);
+if(i.commandName==="trackerstatus")return handleTrackerStatus(i);
+if(i.commandName==="revoketracker")return handleRevokeTracker(i);
+if(i.commandName==="incidenthistory")return handleIncidentHistory(i);
+if(i.commandName==="fuelhistory")return handleFuelHistory(i);
 if(i.commandName==="apply")return openApplicationModal(i);
 if(i.commandName==="application"){const m={accept:"accepted",reject:"rejected",interview:"interview",hold:"hold"};return setApplicationStatus(i,m[i.options.getSubcommand()]);}
 if(i.commandName==="hrcase")return createHrCase(i);
