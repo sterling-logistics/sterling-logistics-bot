@@ -19,7 +19,7 @@ export async function issueTrackerKey(i){
 
 export async function authenticateTracker(token){
   if(!token)return null;
-  const[r]=await db().execute("SELECT tt.driver_id,d.sterling_driver_id,d.discord_username FROM tracker_tokens tt JOIN drivers d ON d.id=tt.driver_id WHERE tt.token_hash=? AND tt.revoked_at IS NULL LIMIT 1",[hash(token)]);
+  const[r]=await db().execute("SELECT tt.driver_id,d.sterling_driver_id,d.discord_id,d.discord_username FROM tracker_tokens tt JOIN drivers d ON d.id=tt.driver_id WHERE tt.token_hash=? AND tt.revoked_at IS NULL LIMIT 1",[hash(token)]);
   if(!r[0])return null;
   await db().execute("UPDATE tracker_tokens SET last_used_at=NOW() WHERE driver_id=?",[r[0].driver_id]);
   return r[0];
@@ -31,6 +31,7 @@ export async function ingestTrackerTelemetry(driverId,p){
   const eventType=String(p.eventType||"heartbeat").slice(0,80);
   const data=safeJson(p.data||{});
   const[s]=await db().execute("SELECT * FROM telemetry_sessions WHERE session_code=? LIMIT 1",[sessionCode]);
+  const sessionBecameOnline=!s[0]||s[0].status!=="online";
   let sessionId;
   if(!s[0]){const[r]=await db().execute("INSERT INTO telemetry_sessions(session_code,driver_id,status) VALUES(?,?,?)",[sessionCode,driverId,status]);sessionId=r.insertId;}
   else{sessionId=s[0].id;await db().execute("UPDATE telemetry_sessions SET status=?,last_seen_at=NOW(),ended_at=IF(?='offline',NOW(),NULL) WHERE id=?",[status,status,sessionId]);}
@@ -78,7 +79,23 @@ export async function ingestTrackerTelemetry(driverId,p){
     if(miles>0)await db().execute("UPDATE drivers SET total_miles=total_miles+?,monthly_miles=monthly_miles+?,jobs_completed=jobs_completed+1,total_income=total_income+? WHERE id=?",[miles,miles,income,driverId]);
   }
   let dispatch=null;try{dispatch=await syncDispatchFromTelemetry(driverId,eventType,data);}catch(e){console.error("[Dispatch Sync]",e);}
-  return{ok:true,sessionId,metrics:{elapsed,milesDelta,fuelUsed,fuelAdded,crashDetected},dispatch};
+  return{ok:true,sessionId,sessionBecameOnline,metrics:{elapsed,milesDelta,fuelUsed,fuelAdded,crashDetected,damageDelta},dispatch};
+}
+
+export async function markStaleTrackerSessionsOffline(staleSeconds=90){
+  const seconds=Math.max(30,Math.min(600,Number(staleSeconds)||90));
+  const[r]=await db().query(`SELECT ts.driver_id,MAX(ts.last_seen_at) last_seen_at,d.sterling_driver_id,d.discord_id,d.discord_username,lt.raw_json
+    FROM telemetry_sessions ts JOIN drivers d ON d.id=ts.driver_id LEFT JOIN live_telemetry lt ON lt.driver_id=ts.driver_id
+    WHERE ts.status<>'offline' GROUP BY ts.driver_id,d.sterling_driver_id,d.discord_id,d.discord_username,lt.raw_json
+    HAVING MAX(ts.last_seen_at)<DATE_SUB(NOW(),INTERVAL ${seconds} SECOND)`);
+  const out=[];
+  for(const x of r){
+    await db().execute(`UPDATE telemetry_sessions SET status='offline',ended_at=COALESCE(ended_at,NOW()) WHERE driver_id=? AND status<>'offline' AND last_seen_at<DATE_SUB(NOW(),INTERVAL ${seconds} SECOND)`,[x.driver_id]);
+    await db().execute("UPDATE live_telemetry SET status='offline' WHERE driver_id=?",[x.driver_id]);
+    let data={};try{data=typeof x.raw_json==="string"?JSON.parse(x.raw_json):(x.raw_json||{});}catch{}
+    out.push({driver_id:x.driver_id,sterling_driver_id:x.sterling_driver_id,discord_id:x.discord_id,discord_username:x.discord_username,last_seen_at:x.last_seen_at,data});
+  }
+  return out;
 }
 
 export async function ingestTelemetry(p){const{driverId}=p;if(!driverId)throw new Error("driverId required");return ingestTrackerTelemetry(driverId,p);}
