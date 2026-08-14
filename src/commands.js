@@ -13,6 +13,7 @@ new SlashCommandBuilder().setName("ticketcleanup").setDescription("Repair stale/
 new SlashCommandBuilder().setName("deletehiddentickets").setDescription("Delete orphan ticket channels").setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 new SlashCommandBuilder().setName("profile").setDescription("View driver profile").addUserOption(o=>o.setName("user").setDescription("Driver").setRequired(false)),
 new SlashCommandBuilder().setName("jobs").setDescription("View recent jobs").addUserOption(o=>o.setName("user").setDescription("Driver").setRequired(false)),
+new SlashCommandBuilder().setName("trackerkey").setDescription("Generate or replace your private Sterling Tracker key"),
 new SlashCommandBuilder().setName("leaderboard").setDescription("View Sterling Logistics driver leaderboard").addStringOption(o=>o.setName("metric").setDescription("Leaderboard metric").setRequired(false).addChoices({name:"Monthly Miles",value:"monthly"},{name:"Total Miles",value:"total"},{name:"Jobs Completed",value:"jobs"},{name:"Safety Score",value:"safety"})),
 new SlashCommandBuilder().setName("companystats").setDescription("View Sterling Logistics company statistics"),
 new SlashCommandBuilder().setName("achievements").setDescription("View driver achievements").addUserOption(o=>o.setName("user").setDescription("Driver").setRequired(false)),
