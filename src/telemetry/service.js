@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import {EmbedBuilder,MessageFlags} from "discord.js";
 import {db} from "../database/mysql.js";
+import {syncDispatchFromTelemetry} from "../dispatch/service.js";
 
 const hash=v=>crypto.createHash("sha256").update(String(v)).digest("hex");
 const safeJson=v=>JSON.parse(JSON.stringify(v,(k,x)=>typeof x==="bigint"?x.toString():x));
@@ -76,7 +77,8 @@ export async function ingestTrackerTelemetry(driverId,p){
     const income=num(data.revenue||data.jobDeliveredRevenue);
     if(miles>0)await db().execute("UPDATE drivers SET total_miles=total_miles+?,monthly_miles=monthly_miles+?,jobs_completed=jobs_completed+1,total_income=total_income+? WHERE id=?",[miles,miles,income,driverId]);
   }
-  return{ok:true,sessionId,metrics:{elapsed,milesDelta,fuelUsed,fuelAdded,crashDetected}};
+  let dispatch=null;try{dispatch=await syncDispatchFromTelemetry(driverId,eventType,data);}catch(e){console.error("[Dispatch Sync]",e);}
+  return{ok:true,sessionId,metrics:{elapsed,milesDelta,fuelUsed,fuelAdded,crashDetected},dispatch};
 }
 
 export async function ingestTelemetry(p){const{driverId}=p;if(!driverId)throw new Error("driverId required");return ingestTrackerTelemetry(driverId,p);}
