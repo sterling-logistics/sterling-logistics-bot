@@ -71,6 +71,7 @@ public partial class MainWindow
                     }
                     else
                     {
+                        ObserveJobHistoryFrame(raw);
                         UpdateUi(raw);
                         TelemetryText.Text = "DIRECT LIVE TELEMETRY";
                         LiveStateText.Text = "LIVE";
