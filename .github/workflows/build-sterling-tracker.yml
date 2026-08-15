@@ -15,7 +15,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Restore Sterling app icon
+      - name: Build clean Sterling branding
         shell: pwsh
         run: |
           Add-Type -AssemblyName System.Drawing
@@ -29,32 +29,80 @@ jobs:
           "@
           $assetDir = '.\desktop\SterlingTracker.Desktop\Assets'
           New-Item -ItemType Directory -Force -Path $assetDir | Out-Null
-          $b64 = (Get-Content "$assetDir\SterlingTracker.ico.b64" -Raw).Trim()
           $pngPath = "$assetDir\SterlingTracker.png"
           $icoPath = "$assetDir\SterlingTracker.ico"
-          [IO.File]::WriteAllBytes($pngPath, [Convert]::FromBase64String($b64))
-          $bmp = New-Object System.Drawing.Bitmap($pngPath)
+          $bmp = New-Object System.Drawing.Bitmap 512,512
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+          $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
+          $g.Clear([System.Drawing.Color]::FromArgb(5,11,18))
+          $blue = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(32,151,255))
+          $white = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::White)
+          $border = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(31,101,158)), 10
+          $g.DrawEllipse($border,32,32,448,448)
+          $font = New-Object System.Drawing.Font 'Arial',150,([System.Drawing.FontStyle]::Bold),([System.Drawing.GraphicsUnit]::Pixel)
+          $sf = New-Object System.Drawing.StringFormat
+          $sf.Alignment = [System.Drawing.StringAlignment]::Center
+          $sf.LineAlignment = [System.Drawing.StringAlignment]::Center
+          $g.DrawString('SL',$font,$white,(New-Object System.Drawing.RectangleF 0,35,512,330),$sf)
+          $small = New-Object System.Drawing.Font 'Arial',35,([System.Drawing.FontStyle]::Bold),([System.Drawing.GraphicsUnit]::Pixel)
+          $g.DrawString('TRACKER',$small,$blue,(New-Object System.Drawing.RectangleF 0,335,512,80),$sf)
+          $bmp.Save($pngPath,[System.Drawing.Imaging.ImageFormat]::Png)
           $hIcon = $bmp.GetHicon()
           $icon = [System.Drawing.Icon]::FromHandle($hIcon)
-          $fs = [IO.File]::Open($icoPath, [IO.FileMode]::Create)
-          $icon.Save($fs)
-          $fs.Close()
-          $icon.Dispose()
-          $bmp.Dispose()
-          [NativeMethods]::DestroyIcon($hIcon) | Out-Null
+          $fs = [IO.File]::Open($icoPath,[IO.FileMode]::Create)
+          $icon.Save($fs); $fs.Close(); $icon.Dispose(); $g.Dispose(); $bmp.Dispose(); [NativeMethods]::DestroyIcon($hIcon) | Out-Null
 
-      - name: Normalize tracker source for WPF build
+      - name: Make sidebar navigation interactive
         shell: pwsh
         run: |
           $xamlPath = '.\desktop\SterlingTracker.Desktop\MainWindow.xaml'
           $xaml = Get-Content $xamlPath -Raw
+          $xaml = $xaml.Replace('<Image Source="Assets/SterlingTracker.ico" Width="112" Height="112" Stretch="Uniform"/>','<Image Source="Assets/SterlingTracker.png" Width="112" Height="112" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/>')
+          $items = @(
+            @('◉   Live Drive','Live Drive'), @('▣   Current Job','Current Job'), @('●   Driver Profile','Driver Profile'),
+            @('★   DriveScore','DriveScore'), @('☰   Jobs History','Jobs History'), @('£   Finances','Finances'),
+            @('♚   Convoys','Convoys'), @('⚙   Settings','Settings')
+          )
+          foreach ($i in $items) {
+            $old = '<TextBlock Text="' + $i[0] + '" Style="{StaticResource NavText}" Margin="12,17,0,0"/>'
+            $new = '<Button Content="' + $i[0] + '" Tag="' + $i[1] + '" Click="NavButton_Click" Background="Transparent" Foreground="#9AAFC4" HorizontalContentAlignment="Left" Padding="12,10" Margin="0,4,0,0"/>'
+            $xaml = $xaml.Replace($old,$new)
+          }
+          $xaml = $xaml.Replace('<TextBlock Text="⌂   Dashboard" Foreground="White" FontWeight="SemiBold"/>','<Button Content="⌂   Dashboard" Tag="Dashboard" Click="NavButton_Click" Background="Transparent" Foreground="White" HorizontalContentAlignment="Left" Padding="0"/>')
+          $xaml = $xaml.Replace('v1.3.0','v1.3.2')
           $xaml = $xaml -replace '<Setter\s+Property="CharacterSpacing"\s+Value="[^"]*"\s*/>\s*', ''
           $xaml = $xaml -replace '\s+CharacterSpacing="[^"]*"', ''
           Set-Content -Path $xamlPath -Value $xaml -Encoding utf8
 
           $codePath = '.\desktop\SterlingTracker.Desktop\MainWindow.xaml.cs'
           $code = Get-Content $codePath -Raw
-          $code = $code.Replace('var src=StrAny(d,"JobValues.CitySource"),dst=StrAny(d,"JobValues.CityDestination");', 'var src=StrAny(d,"JobValues.CitySource");var dst=StrAny(d,"JobValues.CityDestination");')
+          $code = $code.Replace('using System.Windows;','using System.Windows;`nusing System.Windows.Controls;')
+          $handler = @'
+
+    void NavButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button b) return;
+        var page = b.Tag?.ToString() ?? "Dashboard";
+        FooterText.Text = page switch
+        {
+            "Dashboard" => "Dashboard active • live Sterling overview",
+            "Live Drive" => $"Live Drive • {SpeedText.Text} • {RpmText.Text} rpm • {SpeedLimitText.Text} limit",
+            "Current Job" => $"Current Job • {RouteText.Text} • {CargoText.Text}",
+            "Driver Profile" => $"Driver Profile • {DriverNameText.Text} • {RankText.Text}",
+            "DriveScore" => "DriveScore • calculated from live driving events",
+            "Jobs History" => "Jobs History • completed jobs are synchronized with Sterling",
+            "Finances" => $"Finances • current estimated driver share {DriverPayText.Text}",
+            "Convoys" => "Convoys • Sterling convoy features",
+            "Settings" => "Settings • account and tracker configuration",
+            _ => page
+        };
+        StatusText.Text = page == "Dashboard" ? "Sterling Connected" : page;
+    }
+'@
+          $pos = $code.LastIndexOf('}')
+          if ($pos -lt 0) { throw 'Could not inject navigation handler' }
+          $code = $code.Insert($pos,$handler)
           Set-Content -Path $codePath -Value $code -Encoding utf8
 
       - name: Setup .NET 10
@@ -65,40 +113,18 @@ jobs:
       - name: Publish self-contained Windows app
         shell: pwsh
         run: |
-          dotnet publish .\desktop\SterlingTracker.Desktop\SterlingTracker.Desktop.csproj `
-            -c Release `
-            -r win-x64 `
-            --self-contained true `
-            -p:PublishSingleFile=true `
-            -p:EnableCompressionInSingleFile=true `
-            -p:DebugType=None `
-            -p:DebugSymbols=false `
-            -o .\publish\SterlingTracker
+          dotnet publish .\desktop\SterlingTracker.Desktop\SterlingTracker.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o .\publish\SterlingTracker
 
       - name: Bundle ETS2 telemetry runtime
         shell: pwsh
         run: |
-          $temp = Join-Path $env:RUNNER_TEMP 'sterling-telemetry'
-          $serviceZip = Join-Path $temp 'service.zip'
-          $pluginZip = Join-Path $temp 'plugin.zip'
-          $serviceExtract = Join-Path $temp 'service'
-          $pluginExtract = Join-Path $temp 'plugin'
-          $dest = '.\publish\SterlingTracker\Telemetry'
+          $temp = Join-Path $env:RUNNER_TEMP 'sterling-telemetry'; $serviceZip = Join-Path $temp 'service.zip'; $pluginZip = Join-Path $temp 'plugin.zip'; $serviceExtract = Join-Path $temp 'service'; $pluginExtract = Join-Path $temp 'plugin'; $dest = '.\publish\SterlingTracker\Telemetry'
           New-Item -ItemType Directory -Force -Path $temp,$serviceExtract,$pluginExtract,$dest | Out-Null
-
           Invoke-WebRequest 'https://github.com/dichternebel/scs-telemetry-json-service/releases/download/v0.9.5/TelemetryJsonService-v0.9.5-win-x64.zip' -OutFile $serviceZip
           Invoke-WebRequest 'https://github.com/RenCloud/scs-sdk-plugin/releases/download/V.1.12.1/release_v_1_12_1.zip' -OutFile $pluginZip
-          Expand-Archive $serviceZip -DestinationPath $serviceExtract -Force
-          Expand-Archive $pluginZip -DestinationPath $pluginExtract -Force
-
-          $serviceExe = Get-ChildItem $serviceExtract -Filter 'TelemetryJsonService.exe' -Recurse | Select-Object -First 1
-          if (-not $serviceExe) { throw 'TelemetryJsonService.exe was not found in upstream package' }
-          Copy-Item (Join-Path $serviceExe.Directory.FullName '*') $dest -Recurse -Force
-
-          $plugin = Get-ChildItem $pluginExtract -Filter 'scs-telemetry.dll' -Recurse | Where-Object { $_.FullName -match 'Win64|win_x64|x64' } | Select-Object -First 1
-          if (-not $plugin) { $plugin = Get-ChildItem $pluginExtract -Filter 'scs-telemetry.dll' -Recurse | Select-Object -First 1 }
-          if (-not $plugin) { throw 'scs-telemetry.dll was not found in upstream package' }
-          Copy-Item $plugin.FullName (Join-Path $dest 'scs-telemetry.dll') -Force
+          Expand-Archive $serviceZip -DestinationPath $serviceExtract -Force; Expand-Archive $pluginZip -DestinationPath $pluginExtract -Force
+          $serviceExe = Get-ChildItem $serviceExtract -Filter 'TelemetryJsonService.exe' -Recurse | Select-Object -First 1; if (-not $serviceExe) { throw 'TelemetryJsonService.exe not found' }; Copy-Item (Join-Path $serviceExe.Directory.FullName '*') $dest -Recurse -Force
+          $plugin = Get-ChildItem $pluginExtract -Filter 'scs-telemetry.dll' -Recurse | Where-Object { $_.FullName -match 'Win64|win_x64|x64' } | Select-Object -First 1; if (-not $plugin) { $plugin = Get-ChildItem $pluginExtract -Filter 'scs-telemetry.dll' -Recurse | Select-Object -First 1 }; if (-not $plugin) { throw 'scs-telemetry.dll not found' }; Copy-Item $plugin.FullName (Join-Path $dest 'scs-telemetry.dll') -Force
 
       - name: Install Inno Setup
         shell: pwsh
