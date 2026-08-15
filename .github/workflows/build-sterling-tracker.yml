@@ -55,14 +55,15 @@ jobs:
           Copy-Item (Join-Path $source 'Object') (Join-Path $dest 'Object') -Recurse -Force
           Copy-Item (Join-Path $temp 'LICENSE') (Join-Path $dest 'RENCloud-LICENSE.txt') -Force
 
-      - name: Normalize tracker source for v2 build
+      - name: Enforce Tracker 2.1 direct-telemetry build
         shell: pwsh
         run: |
           $xamlPath = '.\desktop\SterlingTracker.Desktop\MainWindow.xaml'
           $xaml = Get-Content $xamlPath -Raw
           $xaml = $xaml -replace '<Setter\s+Property="CharacterSpacing"\s+Value="[^"]*"\s*/>\s*', ''
           $xaml = $xaml -replace '\s+CharacterSpacing="[^"]*"', ''
-          $xaml = $xaml.Replace('v1.3.0', 'v2.0.0')
+          $xaml = $xaml.Replace('v1.3.0', 'v2.1.0').Replace('v2.0.0', 'v2.1.0')
+          $xaml = $xaml.Replace('Sterling Tracker 2.0', 'Sterling Tracker 2.1').Replace('TRACKER 2.0', 'TRACKER 2.1')
           Set-Content -Path $xamlPath -Value $xaml -Encoding utf8
 
           $codePath = '.\desktop\SterlingTracker.Desktop\MainWindow.xaml.cs'
@@ -114,16 +115,16 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path .\dist | Out-Null
           & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' .\installer\SterlingTracker.iss
-          if (-not (Test-Path '.\dist\SterlingTrackerSetup.exe')) { throw 'Installer was not created' }
+          if (-not (Test-Path '.\dist\SterlingTracker-2.1.0-Setup.exe')) { throw 'Installer was not created' }
 
       - name: Upload driver installer
         uses: actions/upload-artifact@v4
         with:
-          name: DOWNLOAD-Sterling-Tracker-v2
-          path: dist/SterlingTrackerSetup.exe
+          name: DOWNLOAD-Sterling-Tracker-2.1.0
+          path: dist/SterlingTracker-2.1.0-Setup.exe
 
       - name: Upload developer portable build
         uses: actions/upload-artifact@v4
         with:
-          name: DEV-ONLY-SterlingTracker-v2-Portable
+          name: DEV-ONLY-SterlingTracker-2.1.0-Portable
           path: publish/SterlingTracker/**
