@@ -75,6 +75,31 @@ jobs:
             -p:DebugSymbols=false `
             -o .\publish\SterlingTracker
 
+      - name: Bundle ETS2 telemetry runtime
+        shell: pwsh
+        run: |
+          $temp = Join-Path $env:RUNNER_TEMP 'sterling-telemetry'
+          $serviceZip = Join-Path $temp 'service.zip'
+          $pluginZip = Join-Path $temp 'plugin.zip'
+          $serviceExtract = Join-Path $temp 'service'
+          $pluginExtract = Join-Path $temp 'plugin'
+          $dest = '.\publish\SterlingTracker\Telemetry'
+          New-Item -ItemType Directory -Force -Path $temp,$serviceExtract,$pluginExtract,$dest | Out-Null
+
+          Invoke-WebRequest 'https://github.com/dichternebel/scs-telemetry-json-service/releases/download/v0.9.5/TelemetryJsonService-v0.9.5-win-x64.zip' -OutFile $serviceZip
+          Invoke-WebRequest 'https://github.com/RenCloud/scs-sdk-plugin/releases/download/V.1.12.1/release_v_1_12_1.zip' -OutFile $pluginZip
+          Expand-Archive $serviceZip -DestinationPath $serviceExtract -Force
+          Expand-Archive $pluginZip -DestinationPath $pluginExtract -Force
+
+          $serviceExe = Get-ChildItem $serviceExtract -Filter 'TelemetryJsonService.exe' -Recurse | Select-Object -First 1
+          if (-not $serviceExe) { throw 'TelemetryJsonService.exe was not found in upstream package' }
+          Copy-Item (Join-Path $serviceExe.Directory.FullName '*') $dest -Recurse -Force
+
+          $plugin = Get-ChildItem $pluginExtract -Filter 'scs-telemetry.dll' -Recurse | Where-Object { $_.FullName -match 'Win64|win_x64|x64' } | Select-Object -First 1
+          if (-not $plugin) { $plugin = Get-ChildItem $pluginExtract -Filter 'scs-telemetry.dll' -Recurse | Select-Object -First 1 }
+          if (-not $plugin) { throw 'scs-telemetry.dll was not found in upstream package' }
+          Copy-Item $plugin.FullName (Join-Path $dest 'scs-telemetry.dll') -Force
+
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup -y --no-progress
@@ -84,6 +109,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path .\dist | Out-Null
           & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' .\installer\SterlingTracker.iss
+          if (-not (Test-Path '.\dist\SterlingTrackerSetup.exe')) { throw 'Installer was not created' }
 
       - name: Upload driver installer
         uses: actions/upload-artifact@v4
