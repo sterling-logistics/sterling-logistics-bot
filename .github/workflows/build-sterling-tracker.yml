@@ -43,6 +43,15 @@ jobs:
           $bmp.Dispose()
           [NativeMethods]::DestroyIcon($hIcon) | Out-Null
 
+      - name: Normalize WPF markup
+        shell: pwsh
+        run: |
+          $xamlPath = '.\desktop\SterlingTracker.Desktop\MainWindow.xaml'
+          $xaml = Get-Content $xamlPath -Raw
+          $xaml = $xaml -replace '<Setter\s+Property="CharacterSpacing"\s+Value="[^"]*"\s*/>\s*', ''
+          $xaml = $xaml -replace '\s+CharacterSpacing="[^"]*"', ''
+          Set-Content -Path $xamlPath -Value $xaml -Encoding utf8
+
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
