@@ -1,288 +1,122 @@
 <Window x:Class="SterlingTracker.Desktop.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Sterling Tracker"
-        Height="900" Width="1500" MinHeight="800" MinWidth="1220"
-        WindowStartupLocation="CenterScreen"
-        Background="#050A10" Foreground="#F4F8FC"
-        Icon="Assets/SterlingTracker.ico"
-        FontFamily="Segoe UI">
-
+        Title="Sterling Tracker 2.0" Height="900" Width="1500" MinHeight="760" MinWidth="1180"
+        WindowStartupLocation="CenterScreen" Background="#05080D" Foreground="#F4F8FC"
+        Icon="Assets/SterlingTracker.ico" FontFamily="Segoe UI">
     <Window.Resources>
         <LinearGradientBrush x:Key="WindowBrush" StartPoint="0,0" EndPoint="1,1">
-            <GradientStop Color="#050A10" Offset="0"/>
-            <GradientStop Color="#07111C" Offset="0.5"/>
-            <GradientStop Color="#06101A" Offset="1"/>
+            <GradientStop Color="#05080D" Offset="0"/><GradientStop Color="#07111B" Offset="0.55"/><GradientStop Color="#07101A" Offset="1"/>
         </LinearGradientBrush>
         <LinearGradientBrush x:Key="HeroBrush" StartPoint="0,0" EndPoint="1,1">
-            <GradientStop Color="#0D2135" Offset="0"/>
-            <GradientStop Color="#0A1725" Offset="0.55"/>
-            <GradientStop Color="#07121D" Offset="1"/>
+            <GradientStop Color="#102942" Offset="0"/><GradientStop Color="#0A1928" Offset="0.58"/><GradientStop Color="#08131E" Offset="1"/>
         </LinearGradientBrush>
-        <LinearGradientBrush x:Key="ConnectedBrush" StartPoint="0,0" EndPoint="1,0">
-            <GradientStop Color="#073124" Offset="0"/>
-            <GradientStop Color="#08251F" Offset="0.4"/>
-            <GradientStop Color="#091722" Offset="1"/>
-        </LinearGradientBrush>
-
-        <Style x:Key="Panel" TargetType="Border">
-            <Setter Property="Background" Value="#0A1521"/>
-            <Setter Property="BorderBrush" Value="#183049"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="16"/>
-            <Setter Property="Padding" Value="18"/>
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background" Value="#0B1621"/><Setter Property="BorderBrush" Value="#19334B"/><Setter Property="BorderThickness" Value="1"/><Setter Property="CornerRadius" Value="14"/><Setter Property="Padding" Value="18"/>
         </Style>
-        <Style x:Key="MetricPanel" TargetType="Border" BasedOn="{StaticResource Panel}">
-            <Setter Property="Padding" Value="16"/>
+        <Style x:Key="MetricCard" TargetType="Border" BasedOn="{StaticResource Card}"><Setter Property="Padding" Value="16"/></Style>
+        <Style x:Key="Eyebrow" TargetType="TextBlock"><Setter Property="Foreground" Value="#4CB5FF"/><Setter Property="FontSize" Value="10"/><Setter Property="FontWeight" Value="Bold"/></Style>
+        <Style x:Key="Muted" TargetType="TextBlock"><Setter Property="Foreground" Value="#7890A6"/><Setter Property="FontSize" Value="11"/></Style>
+        <Style x:Key="NavButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#A3B7C9"/><Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="Transparent"/><Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="13,11"/><Setter Property="Margin" Value="0,2"/><Setter Property="HorizontalContentAlignment" Value="Left"/><Setter Property="FontSize" Value="14"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="NavBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="9" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="NavBorder" Property="Background" Value="#0D2337"/><Setter TargetName="NavBorder" Property="BorderBrush" Value="#1F567C"/><Setter Property="Foreground" Value="White"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
         </Style>
-        <Style x:Key="Eyebrow" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#64B4FF"/>
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-        </Style>
-        <Style x:Key="Muted" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#71869C"/>
-            <Setter Property="FontSize" Value="11"/>
-        </Style>
-        <Style x:Key="NavText" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#9AAFC4"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-        </Style>
-        <Style TargetType="Button">
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="Background" Value="#126FE8"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="18,11"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="9" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+        <Style x:Key="PrimaryButton" TargetType="Button"><Setter Property="Foreground" Value="White"/><Setter Property="Background" Value="#1678F2"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="18,11"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Cursor" Value="Hand"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}" CornerRadius="9" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border></ControlTemplate></Setter.Value></Setter></Style>
+        <Style x:Key="SectionTitle" TargetType="TextBlock"><Setter Property="FontSize" Value="20"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
     </Window.Resources>
 
     <Grid Background="{StaticResource WindowBrush}">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="228"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="230"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
 
-        <Border Grid.Column="0" Background="#050B12" BorderBrush="#132436" BorderThickness="0,0,1,0">
-            <Grid Margin="18,22">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
+        <Border Grid.Column="0" Background="#050A10" BorderBrush="#172A3D" BorderThickness="0,0,1,0">
+            <Grid Margin="17,18"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <Border Background="#091725" BorderBrush="#1A4668" BorderThickness="1" CornerRadius="16" Padding="15">
+                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="50"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <Border Width="44" Height="44" CornerRadius="12" Background="#0C2941" BorderBrush="#248EDF" BorderThickness="1"><StackPanel VerticalAlignment="Center"><TextBlock Text="SL" FontSize="17" FontWeight="Bold" HorizontalAlignment="Center"/><TextBlock Text="VTC" Foreground="#48B5FF" FontSize="7" FontWeight="Bold" HorizontalAlignment="Center"/></StackPanel></Border>
+                        <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center"><TextBlock Text="STERLING" FontSize="18" FontWeight="Bold"/><TextBlock Text="TRACKER 2.0" Foreground="#4CB5FF" FontSize="9" FontWeight="Bold"/></StackPanel>
+                    </Grid>
+                </Border>
 
-                <StackPanel HorizontalAlignment="Center">
-                    <Image Source="Assets/SterlingTracker.ico" Width="112" Height="112" Stretch="Uniform"/>
-                    <TextBlock Text="STERLING" FontSize="23" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,6,0,0"/>
-                    <TextBlock Text="LOGISTICS TRACKER" Foreground="#2B9CFF" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
-                </StackPanel>
-
-                <StackPanel Grid.Row="1" Margin="0,28,0,0">
-                    <Border Background="#0D2A49" BorderBrush="#1C67A8" BorderThickness="1" CornerRadius="10" Padding="12,10">
-                        <TextBlock Text="⌂   Dashboard" Foreground="White" FontWeight="SemiBold"/>
-                    </Border>
-                    <TextBlock Text="◉   Live Drive" Style="{StaticResource NavText}" Margin="12,17,0,0"/>
-                    <TextBlock Text="▣   Current Job" Style="{StaticResource NavText}" Margin="12,17,0,0"/>
-                    <TextBlock Text="●   Driver Profile" Style="{StaticResource NavText}" Margin="12,17,0,0"/>
-                    <TextBlock Text="★   DriveScore" Style="{StaticResource NavText}" Margin="12,17,0,0"/>
-                    <TextBlock Text="☰   Jobs History" Style="{StaticResource NavText}" Margin="12,17,0,0"/>
-                    <TextBlock Text="£   Finances" Style="{StaticResource NavText}" Margin="12,17,0,0"/>
-                    <TextBlock Text="♚   Convoys" Style="{StaticResource NavText}" Margin="12,17,0,0"/>
-                    <TextBlock Text="⚙   Settings" Style="{StaticResource NavText}" Margin="12,17,0,0"/>
+                <StackPanel Grid.Row="1" Margin="0,18,0,0">
+                    <Button Style="{StaticResource NavButton}" Tag="Dashboard" Click="NavButton_Click" Background="#0E2A44" BorderBrush="#1C5C87" Foreground="White" Content="⌂   Dashboard"/>
+                    <Button Style="{StaticResource NavButton}" Tag="Live Drive" Click="NavButton_Click" Content="◉   Live Drive"/>
+                    <Button Style="{StaticResource NavButton}" Tag="Current Job" Click="NavButton_Click" Content="▣   Current Job"/>
+                    <Button Style="{StaticResource NavButton}" Tag="Driver Profile" Click="NavButton_Click" Content="●   Driver Profile"/>
+                    <Button Style="{StaticResource NavButton}" Tag="DriveScore" Click="NavButton_Click" Content="★   DriveScore"/>
+                    <Button Style="{StaticResource NavButton}" Tag="Jobs History" Click="NavButton_Click" Content="☰   Jobs History"/>
+                    <Button Style="{StaticResource NavButton}" Tag="Finances" Click="NavButton_Click" Content="£   Finances"/>
+                    <Button Style="{StaticResource NavButton}" Tag="Convoys" Click="NavButton_Click" Content="♚   Convoys"/>
+                    <Button Style="{StaticResource NavButton}" Tag="Settings" Click="NavButton_Click" Content="⚙   Settings"/>
                 </StackPanel>
 
                 <StackPanel Grid.Row="3">
-                    <Border Background="#08141E" BorderBrush="#15334C" BorderThickness="1" CornerRadius="12" Padding="14">
-                        <StackPanel>
-                            <TextBlock Text="●  STERLING CONNECTED" Foreground="#35D68B" FontSize="11" FontWeight="Bold"/>
-                            <TextBlock Text="All systems operational" Foreground="#B8C8D8" Margin="0,6,0,0"/>
-                        </StackPanel>
+                    <Border Style="{StaticResource Card}" Padding="13">
+                        <StackPanel><TextBlock Text="DIRECT TELEMETRY" Style="{StaticResource Eyebrow}"/><Grid Margin="0,7,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="Shared memory" Foreground="#AFC0CF"/><TextBlock x:Name="LiveStateText" Grid.Column="1" Text="WAITING" Foreground="#3FE398" FontWeight="Bold" FontSize="10"/></Grid><TextBlock x:Name="PingText" Text="—" Foreground="#3FE398" Margin="0,7,0,0"/></StackPanel>
                     </Border>
-                    <Border Background="#08141E" BorderBrush="#15334C" BorderThickness="1" CornerRadius="12" Padding="14" Margin="0,10,0,0">
-                        <StackPanel>
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBlock Text="TELEMETRY" Style="{StaticResource Eyebrow}"/>
-                                <TextBlock x:Name="LiveStateText" Grid.Column="1" Text="WAITING" Foreground="#36D98C" FontWeight="Bold" FontSize="10"/>
-                            </Grid>
-                            <TextBlock Text="Live data streaming" Foreground="#B8C8D8" Margin="0,7,0,0"/>
-                            <TextBlock x:Name="PingText" Text="—" Foreground="#36D98C" Margin="0,5,0,0"/>
-                        </StackPanel>
-                    </Border>
-                    <TextBlock Text="v1.3.0  •  Built on trust" Foreground="#526A82" FontSize="10" Margin="6,12,0,0"/>
+                    <TextBlock Text="v2.0.0  •  Sterling Logistics" Foreground="#526A80" FontSize="9" Margin="5,10,0,0"/>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <Grid Grid.Column="1" Margin="28,22,30,18">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
-
-            <Grid>
-                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <StackPanel>
-                    <TextBlock Text="Dashboard" FontSize="29" FontWeight="Bold"/>
-                    <TextBlock Text="Live ETS2 telemetry and Sterling Logistics operations" Foreground="#8095A9" Margin="0,4,0,0"/>
-                </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border Background="#0A1622" BorderBrush="#183149" BorderThickness="1" CornerRadius="9" Padding="12,9" Margin="0,0,12,0">
-                        <TextBlock Text="v1.3.0" Foreground="#91A6BA" FontWeight="SemiBold"/>
-                    </Border>
-                    <Button x:Name="AccountButton" Content="Sign in with Discord" Click="AccountButton_Click"/>
-                </StackPanel>
+        <Grid Grid.Column="1" Margin="26,20,28,16"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel><TextBlock x:Name="PageTitleText" Text="Dashboard" FontSize="30" FontWeight="Bold"/><TextBlock x:Name="PageSubtitleText" Text="Live ETS2 telemetry and Sterling operations at a glance" Foreground="#7F95A8" Margin="0,4,0,0"/></StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"><Border Background="#0A1722" BorderBrush="#183149" BorderThickness="1" CornerRadius="9" Padding="11,9" Margin="0,0,10,0"><TextBlock Text="v2.0.0" Foreground="#8DA4B8" FontWeight="SemiBold"/></Border><Button x:Name="AccountButton" Style="{StaticResource PrimaryButton}" Content="Sign in with Discord" Click="AccountButton_Click"/></StackPanel>
             </Grid>
 
-            <Border Grid.Row="1" Margin="0,17,0,13" Background="{StaticResource ConnectedBrush}" BorderBrush="#13503E" BorderThickness="1" CornerRadius="15" Padding="17">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <Border Width="42" Height="42" CornerRadius="21" Background="#0A4933" BorderBrush="#19B878" BorderThickness="1">
-                        <TextBlock Text="✓" Foreground="#41E89A" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-                    <StackPanel Grid.Column="1" Margin="14,0,22,0" VerticalAlignment="Center">
-                        <TextBlock x:Name="StatusText" Text="Sterling account not connected" FontSize="17" FontWeight="SemiBold"/>
-                        <TextBlock x:Name="AccountText" Text="Sign in with Discord to link your approved Sterling driver profile" Foreground="#93A9BA" Margin="0,3,0,0"/>
-                    </StackPanel>
-                    <Border Grid.Column="2" Background="#091A22" BorderBrush="#17423C" BorderThickness="1" CornerRadius="9" Padding="12,8" Margin="6,0">
-                        <TextBlock x:Name="GameText" Text="ETS2 not detected" Foreground="#D7E3EC" FontWeight="SemiBold"/>
-                    </Border>
-                    <Border Grid.Column="3" Background="#091A22" BorderBrush="#17423C" BorderThickness="1" CornerRadius="9" Padding="12,8" Margin="6,0">
-                        <TextBlock x:Name="TelemetryText" Text="Telemetry waiting" Foreground="#36D98C" FontWeight="SemiBold"/>
-                    </Border>
-                    <StackPanel Grid.Column="4" Margin="14,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="LAST UPDATE" Foreground="#5C7890" FontSize="9" HorizontalAlignment="Right"/>
-                        <TextBlock x:Name="LastUpdatedText" Text="—" Foreground="#9CB1C5" FontSize="11" Margin="0,3,0,0" HorizontalAlignment="Right"/>
-                    </StackPanel>
+            <Border Grid.Row="1" Margin="0,15,0,14" Background="#08231D" BorderBrush="#17513F" BorderThickness="1" CornerRadius="13" Padding="14">
+                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <Border Width="38" Height="38" CornerRadius="19" Background="#0B4935" BorderBrush="#1AB777" BorderThickness="1"><TextBlock Text="✓" Foreground="#49E7A0" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <StackPanel Grid.Column="1" Margin="12,0,20,0" VerticalAlignment="Center"><TextBlock x:Name="StatusText" Text="Sterling account not connected" FontSize="16" FontWeight="SemiBold"/><TextBlock x:Name="AccountText" Text="Sign in with Discord to link your approved Sterling driver profile" Foreground="#8CA2B4" FontSize="11"/></StackPanel>
+                    <Border Grid.Column="2" Background="#071820" BorderBrush="#17423A" BorderThickness="1" CornerRadius="8" Padding="11,7" Margin="5,0"><TextBlock x:Name="GameText" Text="ETS2 not detected" FontWeight="SemiBold"/></Border>
+                    <Border Grid.Column="3" Background="#071820" BorderBrush="#17423A" BorderThickness="1" CornerRadius="8" Padding="11,7" Margin="5,0"><TextBlock x:Name="TelemetryText" Text="Telemetry waiting" Foreground="#3FE398" FontWeight="SemiBold"/></Border>
+                    <StackPanel Grid.Column="4" Margin="13,0,0,0" VerticalAlignment="Center"><TextBlock Text="LAST FRAME" Foreground="#5D7489" FontSize="8" HorizontalAlignment="Right"/><TextBlock x:Name="LastUpdatedText" Text="—" Foreground="#9DB1C2" FontSize="10" HorizontalAlignment="Right"/></StackPanel>
                 </Grid>
             </Border>
 
-            <Grid Grid.Row="2" Margin="0,0,0,13">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/>
-                </Grid.ColumnDefinitions>
-                <Border Style="{StaticResource MetricPanel}" Margin="0,0,6,0">
-                    <StackPanel><TextBlock Text="SPEED" Style="{StaticResource Eyebrow}"/><TextBlock x:Name="SpeedText" Text="0 mph" FontSize="27" FontWeight="Bold" Margin="0,7,0,0"/><TextBlock Text="Vehicle speed" Style="{StaticResource Muted}" Margin="0,3,0,0"/></StackPanel>
-                </Border>
-                <Border Grid.Column="1" Style="{StaticResource MetricPanel}" Margin="6,0">
-                    <StackPanel><TextBlock Text="ENGINE RPM" Style="{StaticResource Eyebrow}"/><TextBlock x:Name="RpmText" Text="0" FontSize="27" FontWeight="Bold" Margin="0,7,0,0"/><TextBlock Text="rpm" Style="{StaticResource Muted}" Margin="0,3,0,0"/></StackPanel>
-                </Border>
-                <Border Grid.Column="2" Style="{StaticResource MetricPanel}" Margin="6,0">
-                    <StackPanel><TextBlock Text="SPEED LIMIT" Style="{StaticResource Eyebrow}"/><TextBlock x:Name="SpeedLimitText" Text="—" FontSize="27" FontWeight="Bold" Margin="0,7,0,0"/><TextBlock Text="Current road" Style="{StaticResource Muted}" Margin="0,3,0,0"/></StackPanel>
-                </Border>
-                <Border Grid.Column="3" Style="{StaticResource MetricPanel}" Margin="6,0">
-                    <StackPanel><TextBlock Text="FUEL" Style="{StaticResource Eyebrow}"/><TextBlock x:Name="FuelText" Text="—" FontSize="27" FontWeight="Bold" Margin="0,7,0,0"/><TextBlock Text="Tank remaining" Style="{StaticResource Muted}" Margin="0,3,0,0"/></StackPanel>
-                </Border>
-                <Border Grid.Column="4" Style="{StaticResource MetricPanel}" Margin="6,0">
-                    <StackPanel><TextBlock Text="DAMAGE" Style="{StaticResource Eyebrow}"/><TextBlock x:Name="DamageText" Text="—" FontSize="27" FontWeight="Bold" Margin="0,7,0,0"/><TextBlock Text="Vehicle condition" Style="{StaticResource Muted}" Margin="0,3,0,0"/></StackPanel>
-                </Border>
-                <Border Grid.Column="5" Style="{StaticResource MetricPanel}" Margin="6,0,0,0">
-                    <Grid>
-                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-                        <StackPanel><TextBlock Text="CRUISE" Style="{StaticResource Eyebrow}"/><TextBlock x:Name="CruiseText" Text="OFF" FontSize="22" FontWeight="Bold" Margin="0,7,0,0" Foreground="#42D991"/></StackPanel>
-                        <StackPanel Grid.Column="1"><TextBlock Text="GEAR" Style="{StaticResource Eyebrow}"/><TextBlock x:Name="GearText" Text="N" FontSize="22" FontWeight="Bold" Margin="0,7,0,0"/></StackPanel>
+            <Grid Grid.Row="2">
+                <Grid x:Name="DashboardPage">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+                        <Border Style="{StaticResource MetricCard}" Margin="0,0,5,0"><StackPanel><TextBlock Text="SPEED" Style="{StaticResource Eyebrow}"/><TextBlock x:Name="SpeedText" Text="0 mph" FontSize="27" FontWeight="Bold" Margin="0,6,0,0"/><TextBlock Text="LIVE VEHICLE SPEED" Style="{StaticResource Muted}"/></StackPanel></Border>
+                        <Border Grid.Column="1" Style="{StaticResource MetricCard}" Margin="5,0"><StackPanel><TextBlock Text="ENGINE RPM" Style="{StaticResource Eyebrow}"/><TextBlock x:Name="RpmText" Text="0" FontSize="27" FontWeight="Bold" Margin="0,6,0,0"/><TextBlock Text="LIVE ENGINE" Style="{StaticResource Muted}"/></StackPanel></Border>
+                        <Border Grid.Column="2" Style="{StaticResource MetricCard}" Margin="5,0"><StackPanel><TextBlock Text="SPEED LIMIT" Style="{StaticResource Eyebrow}"/><TextBlock x:Name="SpeedLimitText" Text="—" FontSize="27" FontWeight="Bold" Margin="0,6,0,0"/><TextBlock Text="CURRENT ROAD" Style="{StaticResource Muted}"/></StackPanel></Border>
+                        <Border Grid.Column="3" Style="{StaticResource MetricCard}" Margin="5,0"><StackPanel><TextBlock Text="FUEL" Style="{StaticResource Eyebrow}"/><TextBlock x:Name="FuelText" Text="—" FontSize="27" FontWeight="Bold" Margin="0,6,0,0"/><TextBlock Text="TANK REMAINING" Style="{StaticResource Muted}"/></StackPanel></Border>
+                        <Border Grid.Column="4" Style="{StaticResource MetricCard}" Margin="5,0"><StackPanel><TextBlock Text="DAMAGE" Style="{StaticResource Eyebrow}"/><TextBlock x:Name="DamageText" Text="—" FontSize="27" FontWeight="Bold" Margin="0,6,0,0"/><TextBlock Text="TRUCK CONDITION" Style="{StaticResource Muted}"/></StackPanel></Border>
+                        <Border Grid.Column="5" Style="{StaticResource MetricCard}" Margin="5,0,0,0"><StackPanel><TextBlock Text="DRIVE STATE" Style="{StaticResource Eyebrow}"/><StackPanel Orientation="Horizontal" Margin="0,7,0,0"><TextBlock x:Name="GearText" Text="N" FontSize="23" FontWeight="Bold"/><TextBlock Text="  •  " Foreground="#587086"/><TextBlock x:Name="CruiseText" Text="OFF" FontSize="23" FontWeight="Bold" Foreground="#3FE398"/></StackPanel><TextBlock Text="GEAR  •  CRUISE" Style="{StaticResource Muted}"/></StackPanel></Border>
                     </Grid>
-                </Border>
-            </Grid>
-
-            <Grid Grid.Row="3">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="1.3*"/><ColumnDefinition Width="0.85*"/></Grid.ColumnDefinitions>
-
-                <Border Margin="0,0,8,0" Background="{StaticResource HeroBrush}" BorderBrush="#1D4667" BorderThickness="1" CornerRadius="17" Padding="22">
-                    <Grid>
-                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                        <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <TextBlock Text="CURRENT DELIVERY" Foreground="#31A8FF" FontWeight="Bold" FontSize="12"/>
-                            <Border Grid.Column="1" Background="#0B2943" BorderBrush="#1F5B87" BorderThickness="1" CornerRadius="8" Padding="11,6">
-                                <TextBlock x:Name="JobStateText" Text="WAITING" Foreground="#78C6FF" FontWeight="SemiBold" FontSize="11"/>
-                            </Border>
-                        </Grid>
-                        <TextBlock Grid.Row="1" x:Name="RouteText" Text="—   →   —" FontSize="29" FontWeight="SemiBold" Margin="0,14,0,0" TextWrapping="Wrap"/>
-                        <TextBlock Grid.Row="2" x:Name="CargoText" Text="No active delivery" Foreground="#A5B8C9" FontSize="16" Margin="0,7,0,0" TextWrapping="Wrap"/>
-
-                        <Grid Grid.Row="3" Margin="0,28,0,0">
-                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-                            <StackPanel><TextBlock Text="DISTANCE" Style="{StaticResource Eyebrow}"/><TextBlock x:Name="DistanceText" Text="—" FontSize="21" FontWeight="SemiBold" Margin="0,7,0,0"/></StackPanel>
-                            <StackPanel Grid.Column="1"><TextBlock Text="JOB VALUE" Style="{StaticResource Eyebrow}"/><TextBlock x:Name="JobValueText" Text="—" FontSize="21" FontWeight="SemiBold" Margin="0,7,0,0"/></StackPanel>
-                            <StackPanel Grid.Column="2"><TextBlock Text="DRIVER SHARE" Style="{StaticResource Eyebrow}"/><TextBlock Text="35%" FontSize="21" FontWeight="SemiBold" Margin="0,7,0,0" Foreground="#35AFFF"/></StackPanel>
-                            <StackPanel Grid.Column="3"><TextBlock Text="EST. PAY" Style="{StaticResource Eyebrow}"/><TextBlock x:Name="DriverShareText" Text="—" FontSize="21" FontWeight="SemiBold" Margin="0,7,0,0" Foreground="#3EDB91"/></StackPanel>
-                        </Grid>
-
-                        <Border Grid.Row="4" Background="#07111B" BorderBrush="#173047" BorderThickness="1" CornerRadius="10" Padding="13" Margin="0,20,0,0">
-                            <TextBlock Text="Live tracking is sampled locally 5 times per second and synchronized to Sterling every second" Foreground="#6F889E" TextWrapping="Wrap"/>
-                        </Border>
-                    </Grid>
-                </Border>
-
-                <Grid Grid.Column="1" Margin="8,0,0,0">
-                    <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <Border Style="{StaticResource Panel}">
-                        <StackPanel>
-                            <TextBlock Text="DRIVER PROFILE" Foreground="#31A8FF" FontWeight="Bold" FontSize="12"/>
-                            <Grid Margin="0,17,0,0">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="64"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <Border Width="56" Height="56" CornerRadius="28" Background="#102D46" BorderBrush="#199BFF" BorderThickness="2">
-                                    <TextBlock Text="SL" FontSize="18" FontWeight="Bold" Foreground="#79C7FF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock x:Name="DriverNameText" Text="Not signed in" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                                    <TextBlock x:Name="DriverIdText" Text="—" Foreground="#8FA5B9" Margin="0,3,0,0"/>
-                                </StackPanel>
-                            </Grid>
-                            <Border Height="1" Background="#183149" Margin="0,18,0,16"/>
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-                                <StackPanel><TextBlock Text="RANK" Style="{StaticResource Eyebrow}"/><TextBlock x:Name="RankText" Text="—" FontSize="16" FontWeight="SemiBold" Margin="0,6,0,0"/></StackPanel>
-                                <StackPanel Grid.Column="1"><TextBlock Text="CONNECTION" Style="{StaticResource Eyebrow}"/><TextBlock x:Name="ConnectionText" Text="Offline" FontSize="16" FontWeight="SemiBold" Margin="0,6,0,0" Foreground="#35D68B"/></StackPanel>
-                            </Grid>
-                            <Border Background="#07131E" BorderBrush="#173148" BorderThickness="1" CornerRadius="10" Padding="14" Margin="0,20,0,0">
-                                <StackPanel>
-                                    <TextBlock Text="ASSIGNED TRUCK" Style="{StaticResource Eyebrow}"/>
-                                    <TextBlock x:Name="TruckText" Text="—" FontSize="17" FontWeight="SemiBold" Margin="0,7,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
-                            </Border>
+                    <Grid Grid.Row="1"><Grid.ColumnDefinitions><ColumnDefinition Width="1.35*"/><ColumnDefinition Width="0.8*"/></Grid.ColumnDefinitions>
+                        <Border Background="{StaticResource HeroBrush}" BorderBrush="#205075" BorderThickness="1" CornerRadius="15" Padding="22" Margin="0,0,7,0"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                            <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="CURRENT DELIVERY" Style="{StaticResource Eyebrow}"/><Border Grid.Column="1" Background="#0B2C47" BorderBrush="#23618D" BorderThickness="1" CornerRadius="7" Padding="9,5"><TextBlock x:Name="JobStateText" Text="WAITING" Foreground="#7BC9FF" FontWeight="Bold" FontSize="10"/></Border></Grid>
+                            <TextBlock Grid.Row="1" x:Name="RouteText" Text="—  →  —" FontSize="31" FontWeight="SemiBold" Margin="0,14,0,0" TextWrapping="Wrap"/><TextBlock Grid.Row="2" x:Name="CargoText" Text="No active delivery" Foreground="#A9BBC9" FontSize="16" Margin="0,7,0,0"/>
+                            <UniformGrid Grid.Row="3" Columns="4" Margin="0,30,0,0"><StackPanel><TextBlock Text="DISTANCE" Style="{StaticResource Eyebrow}"/><TextBlock x:Name="DistanceText" Text="—" FontSize="21" FontWeight="SemiBold" Margin="0,7,0,0"/></StackPanel><StackPanel><TextBlock Text="JOB VALUE" Style="{StaticResource Eyebrow}"/><TextBlock x:Name="JobValueText" Text="—" FontSize="21" FontWeight="SemiBold" Margin="0,7,0,0"/></StackPanel><StackPanel><TextBlock Text="DRIVER SHARE" Style="{StaticResource Eyebrow}"/><TextBlock Text="35%" FontSize="21" FontWeight="SemiBold" Foreground="#47B7FF" Margin="0,7,0,0"/></StackPanel><StackPanel><TextBlock Text="EST. PAY" Style="{StaticResource Eyebrow}"/><TextBlock x:Name="DriverShareText" Text="—" FontSize="21" FontWeight="SemiBold" Foreground="#3FE398" Margin="0,7,0,0"/></StackPanel></UniformGrid>
+                            <Border Grid.Row="4" Background="#07121C" BorderBrush="#17334B" BorderThickness="1" CornerRadius="10" Padding="12" Margin="0,20,0,0"><TextBlock Text="Tracker 2.0 reads the newest ETS2 frame directly from Windows shared memory — cloud syncing runs independently." Foreground="#7892A8" TextWrapping="Wrap"/></Border>
+                        </Grid></Border>
+                        <StackPanel Grid.Column="1" Margin="7,0,0,0"><Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="DRIVER PROFILE" Style="{StaticResource Eyebrow}"/><TextBlock x:Name="DriverNameText" Text="Not signed in" FontSize="23" FontWeight="SemiBold" Margin="0,12,0,0"/><TextBlock x:Name="DriverIdText" Text="—" Foreground="#65BEFF"/><Separator Margin="0,16" Background="#1A3349"/><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="RANK" Style="{StaticResource Eyebrow}"/><TextBlock x:Name="RankText" Text="—" FontSize="16" Margin="0,5,0,0"/></StackPanel><StackPanel Grid.Column="1"><TextBlock Text="CONNECTION" Style="{StaticResource Eyebrow}"/><TextBlock x:Name="ConnectionText" Text="Offline" FontSize="16" Foreground="#3FE398" Margin="0,5,0,0"/></StackPanel></Grid><Border Background="#07131D" BorderBrush="#173349" BorderThickness="1" CornerRadius="9" Padding="13" Margin="0,18,0,0"><StackPanel><TextBlock Text="ASSIGNED TRUCK" Style="{StaticResource Eyebrow}"/><TextBlock x:Name="TruckText" Text="No truck detected" FontSize="16" FontWeight="SemiBold" Margin="0,6,0,0" TextWrapping="Wrap"/></StackPanel></Border></StackPanel></Border>
+                            <Border Style="{StaticResource Card}" Margin="0,11,0,0"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="TELEMETRY ENGINE" Style="{StaticResource Eyebrow}"/><TextBlock Text="DIRECT" FontSize="20" FontWeight="Bold" Foreground="#3FE398" Margin="0,6,0,0"/><TextBlock Text="No localhost HTTP" Style="{StaticResource Muted}"/></StackPanel><StackPanel Grid.Column="1"><TextBlock Text="UI TARGET" Style="{StaticResource Eyebrow}"/><TextBlock Text="60 FPS" FontSize="20" FontWeight="Bold" Margin="0,6,0,0"/><TextBlock Text="Latest frame" Style="{StaticResource Muted}"/></StackPanel></Grid></Border>
                         </StackPanel>
-                    </Border>
-                    <Grid Grid.Row="1" Margin="0,12,0,0">
-                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-                        <Border Style="{StaticResource Panel}" Padding="14" Margin="0,0,6,0">
-                            <StackPanel><TextBlock Text="DRIVESCORE" Style="{StaticResource Eyebrow}"/><TextBlock Text="— / 100" FontSize="20" FontWeight="SemiBold" Margin="0,7,0,0"/><TextBlock Text="Calculated after live driving data" Style="{StaticResource Muted}" Margin="0,3,0,0" TextWrapping="Wrap"/></StackPanel>
-                        </Border>
-                        <Border Grid.Column="1" Style="{StaticResource Panel}" Padding="14" Margin="6,0,0,0">
-                            <StackPanel><TextBlock Text="TRACKER STATUS" Style="{StaticResource Eyebrow}"/><TextBlock Text="LIVE CLIENT" FontSize="20" FontWeight="SemiBold" Foreground="#3EDB91" Margin="0,7,0,0"/><TextBlock Text="Fast local refresh" Style="{StaticResource Muted}" Margin="0,3,0,0"/></StackPanel>
-                        </Border>
                     </Grid>
                 </Grid>
+
+                <Grid x:Name="LiveDrivePage" Visibility="Collapsed"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions><UniformGrid Columns="4" Margin="0,0,0,12"><Border Style="{StaticResource Card}" Margin="0,0,6,0"><StackPanel><TextBlock Text="SPEED" Style="{StaticResource Eyebrow}"/><TextBlock Text="{Binding Text, ElementName=SpeedText}" FontSize="36" FontWeight="Bold"/></StackPanel></Border><Border Style="{StaticResource Card}" Margin="6,0"><StackPanel><TextBlock Text="RPM" Style="{StaticResource Eyebrow}"/><TextBlock Text="{Binding Text, ElementName=RpmText}" FontSize="36" FontWeight="Bold"/></StackPanel></Border><Border Style="{StaticResource Card}" Margin="6,0"><StackPanel><TextBlock Text="LIMIT" Style="{StaticResource Eyebrow}"/><TextBlock Text="{Binding Text, ElementName=SpeedLimitText}" FontSize="36" FontWeight="Bold"/></StackPanel></Border><Border Style="{StaticResource Card}" Margin="6,0,0,0"><StackPanel><TextBlock Text="FUEL" Style="{StaticResource Eyebrow}"/><TextBlock Text="{Binding Text, ElementName=FuelText}" FontSize="36" FontWeight="Bold"/></StackPanel></Border></UniformGrid><Border Grid.Row="1" Style="{StaticResource Card}"><StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"><TextBlock Text="DIRECT LIVE DRIVE" Foreground="#4CB5FF" FontWeight="Bold" FontSize="13" HorizontalAlignment="Center"/><TextBlock Text="ETS2 → Shared Memory → Sterling Tracker" FontSize="31" FontWeight="SemiBold" Margin="0,12,0,0"/><TextBlock Text="Local gauges are independent from Discord and Sterling server latency" Foreground="#8399AC" FontSize="14" Margin="0,8,0,0"/></StackPanel></Border></Grid>
+
+                <Grid x:Name="CurrentJobPage" Visibility="Collapsed"><Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="ACTIVE DELIVERY" Style="{StaticResource Eyebrow}"/><TextBlock Text="{Binding Text, ElementName=RouteText}" FontSize="38" FontWeight="SemiBold" Margin="0,18,0,0"/><TextBlock Text="{Binding Text, ElementName=CargoText}" Foreground="#A9BBC9" FontSize="18" Margin="0,8,0,0"/><UniformGrid Columns="3" Margin="0,35,0,0"><StackPanel><TextBlock Text="DISTANCE" Style="{StaticResource Eyebrow}"/><TextBlock Text="{Binding Text, ElementName=DistanceText}" FontSize="28"/></StackPanel><StackPanel><TextBlock Text="JOB VALUE" Style="{StaticResource Eyebrow}"/><TextBlock Text="{Binding Text, ElementName=JobValueText}" FontSize="28"/></StackPanel><StackPanel><TextBlock Text="YOUR 35% SHARE" Style="{StaticResource Eyebrow}"/><TextBlock Text="{Binding Text, ElementName=DriverShareText}" Foreground="#3FE398" FontSize="28"/></StackPanel></UniformGrid></StackPanel></Border></Grid>
+
+                <Grid x:Name="DriverProfilePage" Visibility="Collapsed"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><Border Style="{StaticResource Card}" Margin="0,0,7,0"><StackPanel><TextBlock Text="STERLING DRIVER" Style="{StaticResource Eyebrow}"/><TextBlock Text="{Binding Text, ElementName=DriverNameText}" FontSize="32" FontWeight="Bold" Margin="0,14,0,0"/><TextBlock Text="{Binding Text, ElementName=DriverIdText}" Foreground="#4CB5FF" FontSize="16"/><TextBlock Text="RANK" Style="{StaticResource Eyebrow}" Margin="0,28,0,0"/><TextBlock Text="{Binding Text, ElementName=RankText}" FontSize="22"/><TextBlock Text="CONNECTION" Style="{StaticResource Eyebrow}" Margin="0,24,0,0"/><TextBlock Text="{Binding Text, ElementName=ConnectionText}" Foreground="#3FE398" FontSize="22"/></StackPanel></Border><Border Grid.Column="1" Style="{StaticResource Card}" Margin="7,0,0,0"><StackPanel><TextBlock Text="CURRENT TRUCK" Style="{StaticResource Eyebrow}"/><TextBlock Text="{Binding Text, ElementName=TruckText}" FontSize="29" FontWeight="SemiBold" Margin="0,14,0,0" TextWrapping="Wrap"/><TextBlock Text="Tracker identity is linked securely through your Sterling Discord account" Foreground="#7E96AA" Margin="0,22,0,0" TextWrapping="Wrap"/></StackPanel></Border></Grid>
+
+                <Grid x:Name="DriveScorePage" Visibility="Collapsed"><Grid.ColumnDefinitions><ColumnDefinition Width="0.8*"/><ColumnDefinition Width="1.2*"/></Grid.ColumnDefinitions><Border Style="{StaticResource Card}" Margin="0,0,7,0"><StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"><TextBlock Text="DRIVESCORE" Style="{StaticResource Eyebrow}"/><TextBlock Text="—" FontSize="72" FontWeight="Bold"/><TextBlock Text="Builds from safe live driving" Foreground="#8299AB"/></StackPanel></Border><Border Grid.Column="1" Style="{StaticResource Card}" Margin="7,0,0,0"><StackPanel><TextBlock Text="PERFORMANCE INPUTS" Style="{StaticResource Eyebrow}"/><TextBlock Text="Speed compliance" Style="{StaticResource SectionTitle}" Margin="0,18,0,0"/><ProgressBar Value="0" Height="8" Margin="0,8,0,0"/><TextBlock Text="Vehicle condition" Style="{StaticResource SectionTitle}" Margin="0,22,0,0"/><ProgressBar Value="100" Height="8" Margin="0,8,0,0"/><TextBlock Text="DriveScore will use fines damage speeding and delivery performance as Sterling records more live data." Foreground="#7E96AA" TextWrapping="Wrap" Margin="0,28,0,0"/></StackPanel></Border></Grid>
+
+                <Grid x:Name="JobsHistoryPage" Visibility="Collapsed"><Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="JOBS HISTORY" Style="{StaticResource Eyebrow}"/><TextBlock Text="Your synchronized Sterling deliveries will appear here" Style="{StaticResource SectionTitle}" Margin="0,16,0,0"/><TextBlock Text="The tracker already sends job start completion distance revenue damage fuel fines and rest events to Sterling. This page is ready for the history API connection." Foreground="#7E96AA" TextWrapping="Wrap" Margin="0,10,0,0"/></StackPanel></Border></Grid>
+
+                <Grid x:Name="FinancesPage" Visibility="Collapsed"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><Border Style="{StaticResource Card}" Margin="0,0,7,0"><StackPanel><TextBlock Text="CURRENT JOB VALUE" Style="{StaticResource Eyebrow}"/><TextBlock Text="{Binding Text, ElementName=JobValueText}" FontSize="40" FontWeight="Bold" Margin="0,15,0,0"/><TextBlock Text="Your Sterling driver share" Foreground="#7E96AA" Margin="0,25,0,0"/><TextBlock Text="{Binding Text, ElementName=DriverShareText}" Foreground="#3FE398" FontSize="40" FontWeight="Bold"/></StackPanel></Border><Border Grid.Column="1" Style="{StaticResource Card}" Margin="7,0,0,0"><StackPanel><TextBlock Text="STERLING PAY MODEL" Style="{StaticResource Eyebrow}"/><TextBlock Text="35% DRIVER SHARE" FontSize="28" FontWeight="SemiBold" Margin="0,15,0,0"/><TextBlock Text="The current delivery estimate updates from the job income reported by ETS2 telemetry." Foreground="#7E96AA" TextWrapping="Wrap" Margin="0,10,0,0"/></StackPanel></Border></Grid>
+
+                <Grid x:Name="ConvoysPage" Visibility="Collapsed"><Border Style="{StaticResource Card}"><StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"><TextBlock Text="STERLING CONVOYS" Style="{StaticResource Eyebrow}"/><TextBlock Text="Convoy operations ready" FontSize="32" FontWeight="SemiBold" Margin="0,14,0,0"/><TextBlock Text="Live convoy sessions driver positions and company events can be connected here next." Foreground="#7E96AA" Margin="0,8,0,0"/></StackPanel></Border></Grid>
+
+                <Grid x:Name="SettingsPage" Visibility="Collapsed"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><Border Style="{StaticResource Card}" Margin="0,0,7,0"><StackPanel><TextBlock Text="ACCOUNT" Style="{StaticResource Eyebrow}"/><TextBlock Text="Discord-linked Sterling session" Style="{StaticResource SectionTitle}" Margin="0,14,0,0"/><TextBlock Text="Use the account button at the top-right to sign in or sign out securely." Foreground="#7E96AA" TextWrapping="Wrap" Margin="0,8,0,0"/></StackPanel></Border><Border Grid.Column="1" Style="{StaticResource Card}" Margin="7,0,0,0"><StackPanel><TextBlock Text="TELEMETRY" Style="{StaticResource Eyebrow}"/><TextBlock Text="Direct shared-memory mode" Style="{StaticResource SectionTitle}" Margin="0,14,0,0"/><TextBlock Text="No local web server is required. The installer places the SCS telemetry plugin into ETS2 and Sterling reads Local\SCSTelemetry directly." Foreground="#7E96AA" TextWrapping="Wrap" Margin="0,8,0,0"/></StackPanel></Border></Grid>
             </Grid>
 
-            <Grid Grid.Row="4" Margin="0,14,0,0">
-                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <TextBlock x:Name="FooterText" Text="Sterling Tracker is ready" Foreground="#657D94" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="STERLING LOGISTICS  •  BUILT ON TRUST  •  DRIVEN BY EXCELLENCE" Foreground="#425A70" FontSize="10"/>
-            </Grid>
+            <Grid Grid.Row="3" Margin="0,12,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="FooterText" Text="Sterling Tracker 2.0 ready" Foreground="#667F94"/><TextBlock Grid.Column="1" Text="STERLING LOGISTICS  •  BUILT ON TRUST  •  DRIVEN BY EXCELLENCE" Foreground="#42596C" FontSize="9"/></Grid>
         </Grid>
     </Grid>
 </Window>
