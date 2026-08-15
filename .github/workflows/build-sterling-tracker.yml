@@ -18,10 +18,30 @@ jobs:
       - name: Restore Sterling app icon
         shell: pwsh
         run: |
+          Add-Type -AssemblyName System.Drawing
+          Add-Type -TypeDefinition @"
+          using System;
+          using System.Runtime.InteropServices;
+          public static class NativeMethods {
+            [DllImport("user32.dll", CharSet = CharSet.Auto)]
+            public extern static bool DestroyIcon(IntPtr handle);
+          }
+          "@
           $assetDir = '.\desktop\SterlingTracker.Desktop\Assets'
           New-Item -ItemType Directory -Force -Path $assetDir | Out-Null
-          $b64 = Get-Content "$assetDir\SterlingTracker.ico.b64" -Raw
-          [IO.File]::WriteAllBytes("$assetDir\SterlingTracker.ico", [Convert]::FromBase64String($b64.Trim()))
+          $b64 = (Get-Content "$assetDir\SterlingTracker.ico.b64" -Raw).Trim()
+          $pngPath = "$assetDir\SterlingTracker.png"
+          $icoPath = "$assetDir\SterlingTracker.ico"
+          [IO.File]::WriteAllBytes($pngPath, [Convert]::FromBase64String($b64))
+          $bmp = New-Object System.Drawing.Bitmap($pngPath)
+          $hIcon = $bmp.GetHicon()
+          $icon = [System.Drawing.Icon]::FromHandle($hIcon)
+          $fs = [IO.File]::Open($icoPath, [IO.FileMode]::Create)
+          $icon.Save($fs)
+          $fs.Close()
+          $icon.Dispose()
+          $bmp.Dispose()
+          [NativeMethods]::DestroyIcon($hIcon) | Out-Null
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
