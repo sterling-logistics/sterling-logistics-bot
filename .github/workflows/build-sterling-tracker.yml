@@ -43,7 +43,7 @@ jobs:
           $bmp.Dispose()
           [NativeMethods]::DestroyIcon($hIcon) | Out-Null
 
-      - name: Normalize WPF markup
+      - name: Normalize tracker source for WPF build
         shell: pwsh
         run: |
           $xamlPath = '.\desktop\SterlingTracker.Desktop\MainWindow.xaml'
@@ -51,6 +51,11 @@ jobs:
           $xaml = $xaml -replace '<Setter\s+Property="CharacterSpacing"\s+Value="[^"]*"\s*/>\s*', ''
           $xaml = $xaml -replace '\s+CharacterSpacing="[^"]*"', ''
           Set-Content -Path $xamlPath -Value $xaml -Encoding utf8
+
+          $codePath = '.\desktop\SterlingTracker.Desktop\MainWindow.xaml.cs'
+          $code = Get-Content $codePath -Raw
+          $code = $code.Replace('var src=StrAny(d,"JobValues.CitySource"),dst=StrAny(d,"JobValues.CityDestination");', 'var src=StrAny(d,"JobValues.CitySource");var dst=StrAny(d,"JobValues.CityDestination");')
+          Set-Content -Path $codePath -Value $code -Encoding utf8
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
