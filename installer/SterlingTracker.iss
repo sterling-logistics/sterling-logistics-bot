@@ -1,5 +1,5 @@
 #define MyAppName "Sterling Tracker"
-#define MyAppVersion "1.2.1"
+#define MyAppVersion "1.3.0"
 #define MyAppPublisher "Sterling Logistics"
 #define MyAppExeName "SterlingTracker.exe"
 
