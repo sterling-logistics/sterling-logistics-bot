@@ -1,5 +1,5 @@
 #define MyAppName "Sterling Tracker"
-#define MyAppVersion "1.2.0"
+#define MyAppVersion "1.2.1"
 #define MyAppPublisher "Sterling Logistics"
 #define MyAppExeName "SterlingTracker.exe"
 
@@ -19,7 +19,7 @@ OutputBaseFilename=SterlingTrackerSetup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
-PrivilegesRequired=lowest
+PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExeName}
@@ -29,6 +29,7 @@ SetupLogging=yes
 
 [Files]
 Source: "..\publish\SterlingTracker\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "install-telemetry.ps1"; DestDir: "{app}\Telemetry"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\Sterling Tracker"; Filename: "{app}\{#MyAppExeName}"
@@ -42,4 +43,5 @@ Name: "startup"; Description: "Start Sterling Tracker when I sign into Windows";
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "SterlingTracker"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue; Tasks: startup
 
 [Run]
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Telemetry\install-telemetry.ps1"" -PluginSource ""{app}\Telemetry\scs-telemetry.dll"""; StatusMsg: "Installing Sterling ETS2 telemetry..."; Flags: runhidden waituntilterminated
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch Sterling Tracker"; Flags: nowait postinstall skipifsilent
