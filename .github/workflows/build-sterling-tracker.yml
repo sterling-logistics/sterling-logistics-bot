@@ -43,25 +43,34 @@ jobs:
           $bmp.Dispose()
           [NativeMethods]::DestroyIcon($hIcon) | Out-Null
 
-      - name: Normalize tracker source for WPF build
+      - name: Add pinned RenCloud shared-memory client
+        shell: pwsh
+        run: |
+          $temp = Join-Path $env:RUNNER_TEMP 'rencloud-scs'
+          git clone --depth 1 --branch V.1.12.1 https://github.com/RenCloud/scs-sdk-plugin.git $temp
+          $source = Join-Path $temp 'scs-client\C#\SCSSdkClient'
+          $dest = '.\desktop\SterlingTracker.Desktop\Vendor\SCSSdkClient'
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Copy-Item (Join-Path $source '*.cs') $dest -Force
+          Copy-Item (Join-Path $source 'Object') (Join-Path $dest 'Object') -Recurse -Force
+          Copy-Item (Join-Path $temp 'LICENSE') (Join-Path $dest 'RENCloud-LICENSE.txt') -Force
+
+      - name: Normalize tracker source for v2 build
         shell: pwsh
         run: |
           $xamlPath = '.\desktop\SterlingTracker.Desktop\MainWindow.xaml'
           $xaml = Get-Content $xamlPath -Raw
           $xaml = $xaml -replace '<Setter\s+Property="CharacterSpacing"\s+Value="[^"]*"\s*/>\s*', ''
           $xaml = $xaml -replace '\s+CharacterSpacing="[^"]*"', ''
+          $xaml = $xaml.Replace('v1.3.0', 'v2.0.0')
           Set-Content -Path $xamlPath -Value $xaml -Encoding utf8
+
           $codePath = '.\desktop\SterlingTracker.Desktop\MainWindow.xaml.cs'
           $code = Get-Content $codePath -Raw
-          $code = $code.Replace('var src=StrAny(d,"JobValues.CitySource"),dst=StrAny(d,"JobValues.CityDestination");', 'var src=StrAny(d,"JobValues.CitySource");var dst=StrAny(d,"JobValues.CityDestination");')
-          $code = $code.Replace('DriverPayText','DriverShareText')
+          $code = $code.Replace('DriverPayText', 'DriverShareText')
+          $code = $code.Replace('_ = LiveLoop();', '_ = DirectLiveLoop();')
+          $code = $code.Replace('Closed += (_, _) => running = false;', 'Closed += (_, _) => { running = false; directTelemetry.Dispose(); };')
           Set-Content -Path $codePath -Value $code -Encoding utf8
-          $navPath = '.\desktop\SterlingTracker.Desktop\MainWindow.Navigation.cs'
-          if (Test-Path $navPath) {
-            $nav = Get-Content $navPath -Raw
-            $nav = $nav.Replace('DriverPayText','DriverShareText')
-            Set-Content -Path $navPath -Value $nav -Encoding utf8
-          }
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -81,23 +90,16 @@ jobs:
             -p:DebugSymbols=false `
             -o .\publish\SterlingTracker
 
-      - name: Bundle ETS2 telemetry runtime
+      - name: Bundle ETS2 telemetry plugin
         shell: pwsh
         run: |
-          $temp = Join-Path $env:RUNNER_TEMP 'sterling-telemetry'
-          $serviceZip = Join-Path $temp 'service.zip'
+          $temp = Join-Path $env:RUNNER_TEMP 'sterling-plugin'
           $pluginZip = Join-Path $temp 'plugin.zip'
-          $serviceExtract = Join-Path $temp 'service'
           $pluginExtract = Join-Path $temp 'plugin'
           $dest = '.\publish\SterlingTracker\Telemetry'
-          New-Item -ItemType Directory -Force -Path $temp,$serviceExtract,$pluginExtract,$dest | Out-Null
-          Invoke-WebRequest 'https://github.com/dichternebel/scs-telemetry-json-service/releases/download/v0.9.5/TelemetryJsonService-v0.9.5-win-x64.zip' -OutFile $serviceZip
+          New-Item -ItemType Directory -Force -Path $temp,$pluginExtract,$dest | Out-Null
           Invoke-WebRequest 'https://github.com/RenCloud/scs-sdk-plugin/releases/download/V.1.12.1/release_v_1_12_1.zip' -OutFile $pluginZip
-          Expand-Archive $serviceZip -DestinationPath $serviceExtract -Force
           Expand-Archive $pluginZip -DestinationPath $pluginExtract -Force
-          $serviceExe = Get-ChildItem $serviceExtract -Filter 'TelemetryJsonService.exe' -Recurse | Select-Object -First 1
-          if (-not $serviceExe) { throw 'TelemetryJsonService.exe was not found in upstream package' }
-          Copy-Item (Join-Path $serviceExe.Directory.FullName '*') $dest -Recurse -Force
           $plugin = Get-ChildItem $pluginExtract -Filter 'scs-telemetry.dll' -Recurse | Where-Object { $_.FullName -match 'Win64|win_x64|x64' } | Select-Object -First 1
           if (-not $plugin) { $plugin = Get-ChildItem $pluginExtract -Filter 'scs-telemetry.dll' -Recurse | Select-Object -First 1 }
           if (-not $plugin) { throw 'scs-telemetry.dll was not found in upstream package' }
@@ -117,11 +119,11 @@ jobs:
       - name: Upload driver installer
         uses: actions/upload-artifact@v4
         with:
-          name: DOWNLOAD-Sterling-Tracker
+          name: DOWNLOAD-Sterling-Tracker-v2
           path: dist/SterlingTrackerSetup.exe
 
       - name: Upload developer portable build
         uses: actions/upload-artifact@v4
         with:
-          name: DEV-ONLY-SterlingTracker-Portable
+          name: DEV-ONLY-SterlingTracker-v2-Portable
           path: publish/SterlingTracker/**
