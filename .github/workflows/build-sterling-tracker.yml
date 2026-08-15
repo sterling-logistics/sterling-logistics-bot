@@ -54,7 +54,14 @@ jobs:
           $codePath = '.\desktop\SterlingTracker.Desktop\MainWindow.xaml.cs'
           $code = Get-Content $codePath -Raw
           $code = $code.Replace('var src=StrAny(d,"JobValues.CitySource"),dst=StrAny(d,"JobValues.CityDestination");', 'var src=StrAny(d,"JobValues.CitySource");var dst=StrAny(d,"JobValues.CityDestination");')
+          $code = $code.Replace('DriverPayText','DriverShareText')
           Set-Content -Path $codePath -Value $code -Encoding utf8
+          $navPath = '.\desktop\SterlingTracker.Desktop\MainWindow.Navigation.cs'
+          if (Test-Path $navPath) {
+            $nav = Get-Content $navPath -Raw
+            $nav = $nav.Replace('DriverPayText','DriverShareText')
+            Set-Content -Path $navPath -Value $nav -Encoding utf8
+          }
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
