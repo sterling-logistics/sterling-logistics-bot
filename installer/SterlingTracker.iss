@@ -1,5 +1,5 @@
 #define MyAppName "Sterling Tracker"
-#define MyAppVersion "1.3.0"
+#define MyAppVersion "2.0.0"
 #define MyAppPublisher "Sterling Logistics"
 #define MyAppExeName "SterlingTracker.exe"
 
@@ -43,5 +43,5 @@ Name: "startup"; Description: "Start Sterling Tracker when I sign into Windows";
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "SterlingTracker"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue; Tasks: startup
 
 [Run]
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Telemetry\install-telemetry.ps1"" -PluginSource ""{app}\Telemetry\scs-telemetry.dll"""; StatusMsg: "Installing Sterling ETS2 telemetry..."; Flags: runhidden waituntilterminated
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Telemetry\install-telemetry.ps1"" -PluginSource ""{app}\Telemetry\scs-telemetry.dll"""; StatusMsg: "Installing Sterling direct ETS2 telemetry..."; Flags: runhidden waituntilterminated
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch Sterling Tracker"; Flags: nowait postinstall skipifsilent
