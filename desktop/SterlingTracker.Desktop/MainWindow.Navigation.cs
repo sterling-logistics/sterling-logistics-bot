@@ -98,7 +98,7 @@ public partial class MainWindow
             "Driver Profile" => $"Driver Profile • {DriverNameText.Text} • {RankText.Text}",
             "DriveScore" => "DriveScore • live driving performance and safety scoring",
             "Jobs History" => "Jobs History • completed Sterling deliveries",
-            "Finances" => $"Finances • estimated current driver share {DriverPayText.Text}",
+            "Finances" => $"Finances • estimated current driver share {DriverShareText.Text}",
             "Convoys" => "Convoys • Sterling convoy operations",
             "Settings" => "Settings • tracker account and application configuration",
             _ => page
