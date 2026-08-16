@@ -1,0 +1,6 @@
+---
+deployment:
+  tasks:
+    - /usr/bin/env npm install --omit=dev
+    - /bin/mkdir -p tmp
+    - /usr/bin/touch tmp/restart.txt
