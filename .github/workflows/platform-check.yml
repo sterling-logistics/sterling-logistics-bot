@@ -1,0 +1,30 @@
+name: Sterling Platform Check
+
+on:
+  push:
+    branches:
+      - main
+      - 'agent/**'
+  pull_request:
+
+jobs:
+  node-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+      - name: Check server JavaScript
+        run: npm run check
+      - name: Check website assets
+        run: |
+          test -f website/index.html
+          test -f website/dashboard.html
+          test -f website/styles.css
+          test -f website/app.js
+          test -f website/dashboard.js
+          node --check website/app.js
+          node --check website/dashboard.js

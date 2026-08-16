@@ -2,8 +2,10 @@ import {db} from "../database/mysql.js";
 
 const num=v=>Number(v)||0;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-const DRIVER_PAY_RATE=0.35;
-const FUEL_PRICE_PER_LITRE=1.70;
+const envRate=(name,fallback)=>clamp(Number.isFinite(Number(process.env[name]))?Number(process.env[name]):fallback,0,1);
+const envMoney=(name,fallback)=>Math.max(0,Number.isFinite(Number(process.env[name]))?Number(process.env[name]):fallback);
+const DRIVER_PAY_RATE=envRate("DRIVER_PAY_RATE",0.35);
+const FUEL_PRICE_PER_LITRE=envMoney("FUEL_PRICE_PER_LITRE",1.70);
 let schemaPromise=null;
 
 export async function ensureEconomySchema(){
