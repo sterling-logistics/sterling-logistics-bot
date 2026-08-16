@@ -5,8 +5,10 @@ const STAFF_CATEGORY_NAME="staff hq";
 const STATUS_CHANNEL_NAME="driver-status";
 const EVENT_CHANNEL_NAME="tracker-events";
 const STAFF_ROLE_NAMES=["Founder","Executive Management","Senior Management"];
-const TRACKER_EVENTS_VISIBLE=new Set(["job-started","job-delivered","job-cancelled","fuel-stop","fine"]);
 const ALL_DRIVER_STATUS_EVENTS=new Set(["job-started","job-delivered","job-cancelled","fuel-stop","fine","rest-stop","crash","toll","ferry","train"]);
+// Every meaningful ETS2 tracker event is now mirrored automatically to tracker-events.
+// Heartbeats are intentionally excluded so Discord does not get spammed every second.
+const TRACKER_EVENTS_VISIBLE=new Set(ALL_DRIVER_STATUS_EVENTS);
 
 let trackerEventsChannelId=PREFERRED_TRACKER_EVENTS_CHANNEL_ID;
 let driverStatusChannelId=null;
@@ -22,9 +24,9 @@ export async function ensureTrackerChannels(guild){
   let events=await guild.channels.fetch(PREFERRED_TRACKER_EVENTS_CHANNEL_ID).catch(()=>null);
   if(!events)events=guild.channels.cache.find(c=>c.type===ChannelType.GuildText&&c.name===EVENT_CHANNEL_NAME);
   if(!events){
-    try{events=await guild.channels.create({name:EVENT_CHANNEL_NAME,type:ChannelType.GuildText,parent:parent?.id,topic:"Job starts/completions/cancellations, fuel stops and fines.",permissionOverwrites:hiddenOverwrites(guild,roles)});}catch(err){console.warn("[Tracker Channels] Could not create tracker-events:",err?.code||err?.message||err);}
+    try{events=await guild.channels.create({name:EVENT_CHANNEL_NAME,type:ChannelType.GuildText,parent:parent?.id,topic:"Automatic Sterling Tracker feed: jobs, crashes, fuel, fines, rest, tolls, ferries and trains.",permissionOverwrites:hiddenOverwrites(guild,roles)});}catch(err){console.warn("[Tracker Channels] Could not create tracker-events:",err?.code||err?.message||err);}
   }
-  if(events){await applyHiddenStaffAccess(events,guild,roles,parent);await events.setTopic("Job starts/completions/cancellations, fuel stops and fines.").catch(()=>{});trackerEventsChannelId=events.id;}
+  if(events){await applyHiddenStaffAccess(events,guild,roles,parent);await events.setTopic("Automatic Sterling Tracker feed: jobs, crashes, fuel, fines, rest, tolls, ferries and trains.").catch(()=>{});trackerEventsChannelId=events.id;}
   let status=guild.channels.cache.find(c=>c.type===ChannelType.GuildText&&c.name===STATUS_CHANNEL_NAME&&(!parent||c.parentId===parent.id));
   if(!status){
     try{status=await guild.channels.create({name:STATUS_CHANNEL_NAME,type:ChannelType.GuildText,parent:parent?.id,topic:"Complete hidden Sterling driver activity feed, including online/offline and all tracker events.",permissionOverwrites:hiddenOverwrites(guild,roles)});}catch(err){console.warn("[Tracker Channels] Could not create driver-status:",err?.code||err?.message||err);}
@@ -41,29 +43,42 @@ function buildActivityEmbed(driver,event,footer="Sterling Logistics Tracker"){
   const d=event.data||{};let title="🚛 Tracker Event",description=`**${who(driver)}** triggered a tracker event.`,fields=[];
   switch(event.type){
     case "job-started": title="🟢 Job Started";description=`**${who(driver)}** started an ETS2 job.`;fields=[{name:"Cargo",value:d.cargo||"Unknown",inline:true},{name:"Route",value:route(d),inline:false},{name:"Truck",value:d.truck||"Unknown",inline:true}];break;
-    case "job-delivered": title="✅ Job Completed";description=`**${who(driver)}** completed a delivery.`;fields=[{name:"Cargo",value:d.cargo||"Unknown",inline:true},{name:"Route",value:route(d),inline:false},{name:"Distance",value:`${f((Number(d.distanceKm)||0)*0.621371)} mi`,inline:true},{name:"Revenue",value:`€${Math.round(Number(d.revenue)||0).toLocaleString()}`,inline:true},{name:"Damage",value:`${f(Math.max(Number(d.truckDamage)||0,Number(d.trailerDamage)||0,Number(d.cargoDamage)||0)*100)}%`,inline:true}];break;
+    case "job-delivered": title="✅ Job Completed";description=`**${who(driver)}** completed a delivery.`;fields=[{name:"Cargo",value:d.cargo||"Unknown",inline:true},{name:"Route",value:route(d),inline:false},{name:"Distance",value:`${f((Number(d.distanceKm)||0)*0.621371)} mi`,inline:true},{name:"Revenue",value:`€${Math.round(Number(d.revenue)||0).toLocaleString()}`,inline:true},{name:"Driver Share",value:`€${Math.round((Number(d.revenue)||0)*0.35).toLocaleString()}`,inline:true},{name:"Damage",value:`${f(Math.max(Number(d.truckDamage)||0,Number(d.trailerDamage)||0,Number(d.cargoDamage)||0)*100)}%`,inline:true}];break;
     case "job-cancelled": title="🟠 Job Cancelled";description=`**${who(driver)}** cancelled an ETS2 job.`;fields=[{name:"Cargo",value:d.cargo||"Unknown",inline:true},{name:"Route",value:route(d),inline:false}];break;
     case "fuel-stop": title="⛽ Fuel Stop";description=`**${who(driver)}** refuelled.`;fields=[{name:"Fuel Added",value:`${f(event.fuelAdded)} L`,inline:true},{name:"Fuel Level",value:`${f(d.fuelLiters)} L`,inline:true},{name:"Truck",value:d.truck||"Unknown",inline:true}];break;
     case "fine": title="🚨 Fine Issued";description=`**${who(driver)}** received an in-game fine.`;fields=[{name:"Offence",value:d.fineOffence||"Unknown",inline:true},{name:"Amount",value:`€${Math.round(Number(d.fineAmount)||0).toLocaleString()}`,inline:true},{name:"Speed",value:`${f((Number(d.speedMps)||0)*2.2369362921)} mph`,inline:true}];break;
     case "rest-stop": title="🛏️ Rest Stop";description=`**${who(driver)}** took an ETS2 rest stop.`;fields=[{name:"Truck",value:d.truck||"Unknown",inline:true},{name:"Game Time Jump",value:`${Math.round(Number(d.gameTimeJump)||0)} game min`,inline:true}];break;
     case "crash": title="💥 Crash / Damage";description=`**${who(driver)}** had a new damage event.`;fields=[{name:"Speed",value:`${f(event.speedMph)} mph`,inline:true},{name:"Truck Damage",value:`${f((Number(d.truckDamage)||0)*100)}%`,inline:true}];break;
-    case "toll": title="🛣️ Toll Gate";description=`**${who(driver)}** passed a toll gate.`;break;
-    case "ferry": title="⛴️ Ferry Used";description=`**${who(driver)}** used a ferry.`;break;
-    case "train": title="🚆 Train Used";description=`**${who(driver)}** used train transport.`;break;
+    case "toll": title="🛣️ Toll Gate";description=`**${who(driver)}** passed a toll gate.`;fields=[{name:"Route",value:route(d),inline:false},{name:"Truck",value:d.truck||"Unknown",inline:true}];break;
+    case "ferry": title="⛴️ Ferry Used";description=`**${who(driver)}** used a ferry.`;fields=[{name:"Route",value:route(d),inline:false},{name:"Truck",value:d.truck||"Unknown",inline:true}];break;
+    case "train": title="🚆 Train Used";description=`**${who(driver)}** used train transport.`;fields=[{name:"Route",value:route(d),inline:false},{name:"Truck",value:d.truck||"Unknown",inline:true}];break;
     default:return null;
   }
+  const e=new EmbedBuilder().setTitle(title).setDescription(description).setTimestamp().setFooter({text:footer});if(fields.length)e.addFields(fields);return e;
+}
+
+function buildPresenceEmbed(driver,event,footer){
+  const d=event.data||{};const online=event.type==="driver-online";
+  const title=online?"🟢 Driver Online":"🔴 Driver Offline";
+  const description=online?`**${who(driver)}** connected to Sterling Tracker.`:`**${who(driver)}** disconnected from Sterling Tracker.`;
+  const fields=[];
+  if(d.truck)fields.push({name:"Truck",value:String(d.truck),inline:true});
+  if(d.cargo)fields.push({name:"Cargo",value:String(d.cargo),inline:true});
+  if(d.sourceCity||d.destinationCity)fields.push({name:"Route",value:route(d),inline:false});
+  if(!online&&event.lastSeenAt)fields.push({name:"Last Seen",value:`<t:${Math.floor(new Date(event.lastSeenAt).getTime()/1000)}:R>`,inline:true});
   const e=new EmbedBuilder().setTitle(title).setDescription(description).setTimestamp().setFooter({text:footer});if(fields.length)e.addFields(fields);return e;
 }
 
 export async function postTrackerPresence(client,guildId,driver,event){
   if(!event||!["driver-online","driver-offline"].includes(event.type))return;
   try{
-    const guild=await client.guilds.fetch(guildId);const setup=await ensureTrackerChannels(guild);const ch=driverStatusChannelId?await guild.channels.fetch(driverStatusChannelId).catch(()=>null):setup.status;
-    if(!ch)return;
-    const d=event.data||{};const online=event.type==="driver-online";const title=online?"🟢 Driver Loaded ETS2":"🔴 Driver Left ETS2";const description=online?`**${who(driver)}** is now connected to the Sterling Tracker.`:`**${who(driver)}** is no longer connected to the Sterling Tracker.`;const fields=[];
-    if(d.truck)fields.push({name:"Truck",value:String(d.truck),inline:true});if(d.cargo)fields.push({name:"Cargo",value:String(d.cargo),inline:true});if(d.sourceCity||d.destinationCity)fields.push({name:"Route",value:route(d),inline:false});if(!online&&event.lastSeenAt)fields.push({name:"Last Seen",value:`<t:${Math.floor(new Date(event.lastSeenAt).getTime()/1000)}:R>`,inline:true});
-    const e=new EmbedBuilder().setTitle(title).setDescription(description).setTimestamp().setFooter({text:"Sterling Logistics Staff Tracker"});if(fields.length)e.addFields(fields);
-    const roleIds=setup.roles.map(r=>r.id);const ping=roleIds.map(id=>`<@&${id}>`).join(" ");await ch.send({content:ping||undefined,embeds:[e],allowedMentions:{roles:roleIds}});
+    const guild=await client.guilds.fetch(guildId);const setup=await ensureTrackerChannels(guild);
+    const statusCh=driverStatusChannelId?await guild.channels.fetch(driverStatusChannelId).catch(()=>null):setup.status;
+    const eventCh=trackerEventsChannelId?await guild.channels.fetch(trackerEventsChannelId).catch(()=>null):setup.events;
+    const staffEmbed=buildPresenceEmbed(driver,event,"Sterling Logistics Staff Tracker");
+    if(statusCh)await statusCh.send({embeds:[staffEmbed]});
+    // Presence is also mirrored to tracker-events so the full lifecycle is automatic in one feed.
+    if(eventCh){const publicEmbed=buildPresenceEmbed(driver,event,"Sterling Logistics Tracker Events");await eventCh.send({embeds:[publicEmbed]});}
   }catch(err){console.error("[Tracker Presence]",err);}
 }
 
