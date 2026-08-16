@@ -1,6 +1,7 @@
 ---
 deployment:
   tasks:
-    - /usr/bin/env npm install --omit=dev
-    - /bin/mkdir -p tmp
-    - /usr/bin/touch tmp/restart.txt
+    - export DEPLOYPATH=/home/sterling/sterling-web/
+    - cd $DEPLOYPATH && /usr/bin/env npm install --omit=dev
+    - /bin/mkdir -p $DEPLOYPATH/tmp
+    - /usr/bin/touch $DEPLOYPATH/tmp/restart.txt
