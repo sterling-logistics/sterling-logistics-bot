@@ -15,4 +15,18 @@ async function loadOverview(){
   }catch{document.querySelectorAll('[data-stat]').forEach(x=>{if(!x.textContent.trim()||x.textContent.trim()==='—')x.textContent='0'})}
 }
 const reveal=()=>{const nodes=[...document.querySelectorAll('.feature,.teaser-card,.dark-panel,.tracker-window,.tracker-copy,.convoy-card,.recruitment-banner,.timeline-item,.listing-card,.rank-card,.contact-card')];if(!('IntersectionObserver'in window)){nodes.forEach(n=>n.classList.add('revealed'));return}nodes.forEach(n=>n.classList.add('reveal'));const io=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('revealed');io.unobserve(e.target)}}),{threshold:.08});nodes.forEach(n=>io.observe(n))};
-loadOverview();reveal();
+
+const DISCORD_INVITE='https://discord.gg/fXkxccZNmp';
+function addDiscordInvite(){
+  const style=document.createElement('style');
+  style.textContent=`.discord-float{position:fixed;right:22px;bottom:22px;z-index:80;display:flex;align-items:center;gap:10px;padding:12px 16px;border:1px solid rgba(132,151,255,.45);border-radius:12px;background:linear-gradient(180deg,#5865f2,#4752c4);color:#fff;font:900 10px/1 Inter,Segoe UI,Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;box-shadow:0 18px 45px rgba(0,0,0,.38),0 0 0 1px rgba(255,255,255,.04) inset;transition:.2s}.discord-float:hover{transform:translateY(-3px);filter:brightness(1.08)}.discord-float svg{width:18px;height:18px;fill:currentColor}.footer-discord{color:#aeb7ff!important}@media(max-width:640px){.discord-float{right:14px;bottom:14px;padding:11px 13px}.discord-float span{display:none}}`;
+  document.head.appendChild(style);
+  const link=document.createElement('a');
+  link.className='discord-float';link.href=DISCORD_INVITE;link.target='_blank';link.rel='noopener';link.setAttribute('aria-label','Join Sterling Logistics on Discord');
+  link.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 5.3A17 17 0 0 0 15.4 4l-.5 1.1a15.4 15.4 0 0 0-5.8 0L8.6 4a17 17 0 0 0-4.1 1.3C1.9 9.1 1.2 12.8 1.6 16.4a16.9 16.9 0 0 0 5 2.5l1.2-1.7a10.7 10.7 0 0 1-1.9-.9l.5-.4c3.7 1.7 7.7 1.7 11.3 0l.6.4c-.6.4-1.3.7-1.9.9l1.2 1.7a16.9 16.9 0 0 0 5-2.5c.5-4.2-.8-7.8-3.1-11.1ZM8.3 14.2c-1.1 0-2-1-2-2.2s.9-2.2 2-2.2 2 1 2 2.2-.9 2.2-2 2.2Zm7.4 0c-1.1 0-2-1-2-2.2s.9-2.2 2-2.2 2 1 2 2.2-.9 2.2-2 2.2Z"/></svg><span>Join our Discord</span>';
+  document.body.appendChild(link);
+  const footer=document.querySelector('.footer-links>div:last-child');
+  if(footer){const a=document.createElement('a');a.href=DISCORD_INVITE;a.target='_blank';a.rel='noopener';a.className='footer-discord';a.textContent='Discord';footer.appendChild(a)}
+}
+
+loadOverview();reveal();addDiscordInvite();
