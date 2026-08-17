@@ -1,3 +1,4 @@
+const liveCss=document.createElement('link');liveCss.rel='stylesheet';liveCss.href='/live.css?v=2';document.head.appendChild(liveCss);
 const fmt=n=>Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0});
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
 const menu=document.querySelector('[data-menu]'),nav=document.querySelector('[data-nav]');
@@ -16,6 +17,16 @@ async function loadOverview(){
 }
 const reveal=()=>{const nodes=[...document.querySelectorAll('.feature,.teaser-card,.dark-panel,.tracker-window,.tracker-copy,.convoy-card,.recruitment-banner,.timeline-item,.listing-card,.rank-card,.contact-card')];if(!('IntersectionObserver'in window)){nodes.forEach(n=>n.classList.add('revealed'));return}nodes.forEach(n=>n.classList.add('reveal'));const io=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('revealed');io.unobserve(e.target)}}),{threshold:.08});nodes.forEach(n=>io.observe(n))};
 
+function addLiveBackground(){
+  const sky=document.createElement('div');sky.className='live-sky';sky.setAttribute('aria-hidden','true');
+  for(let i=0;i<24;i++){const d=document.createElement('i');d.className='live-dot';d.style.left=`${(i*37)%100}%`;d.style.top=`${(i*53)%92}%`;d.style.setProperty('--dur',`${15+(i%8)*2.4}s`);d.style.setProperty('--delay',`${-(i%11)*1.8}s`);sky.appendChild(d)}
+  for(let i=0;i<4;i++){const r=document.createElement('span');r.className='live-route';r.style.top=`${18+i*19}%`;r.style.left=`${-36-i*8}%`;r.style.setProperty('--angle',`${-16+i*7}deg`);r.style.setProperty('--route-dur',`${18+i*5}s`);r.style.animationDelay=`${-i*4.2}s`;sky.appendChild(r)}
+  document.body.prepend(sky);const vignette=document.createElement('div');vignette.className='live-vignette';vignette.setAttribute('aria-hidden','true');document.body.prepend(vignette);
+  const fine=matchMedia('(pointer:fine)').matches&&!matchMedia('(prefers-reduced-motion:reduce)').matches;
+  if(fine)window.addEventListener('pointermove',e=>{document.documentElement.style.setProperty('--mx',`${Math.round(e.clientX/innerWidth*100)}%`);document.documentElement.style.setProperty('--my',`${Math.round(e.clientY/innerHeight*100)}%`)},{passive:true});
+  window.addEventListener('scroll',()=>document.documentElement.style.setProperty('--scroll-shift',`${(scrollY*.07)%78}px`),{passive:true});
+}
+
 const DISCORD_INVITE='https://discord.gg/fXkxccZNmp';
 function addDiscordInvite(){
   const style=document.createElement('style');
@@ -26,7 +37,7 @@ function addDiscordInvite(){
   link.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 5.3A17 17 0 0 0 15.4 4l-.5 1.1a15.4 15.4 0 0 0-5.8 0L8.6 4a17 17 0 0 0-4.1 1.3C1.9 9.1 1.2 12.8 1.6 16.4a16.9 16.9 0 0 0 5 2.5l1.2-1.7a10.7 10.7 0 0 1-1.9-.9l.5-.4c3.7 1.7 7.7 1.7 11.3 0l.6.4c-.6.4-1.3.7-1.9.9l1.2 1.7a16.9 16.9 0 0 0 5-2.5c.5-4.2-.8-7.8-3.1-11.1ZM8.3 14.2c-1.1 0-2-1-2-2.2s.9-2.2 2-2.2 2 1 2 2.2-.9 2.2-2 2.2Zm7.4 0c-1.1 0-2-1-2-2.2s.9-2.2 2-2.2 2 1 2 2.2-.9 2.2-2 2.2Z"/></svg><span>Join our Discord</span>';
   document.body.appendChild(link);
   const footer=document.querySelector('.footer-links>div:last-child');
-  if(footer){const a=document.createElement('a');a.href=DISCORD_INVITE;a.target='_blank';a.rel='noopener';a.className='footer-discord';a.textContent='Discord';footer.appendChild(a)}
+  if(footer&&!footer.querySelector('.footer-discord')){const a=document.createElement('a');a.href=DISCORD_INVITE;a.target='_blank';a.rel='noopener';a.className='footer-discord';a.textContent='Discord';footer.appendChild(a)}
 }
 
-loadOverview();reveal();addDiscordInvite();
+addLiveBackground();loadOverview();reveal();addDiscordInvite();
