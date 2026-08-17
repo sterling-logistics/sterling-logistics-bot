@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#06101a">
+  <meta name="theme-color" content="#05070a">
   <meta name="description" content="Sterling Logistics — a professional Euro Truck Simulator 2 virtual trucking company powered by Sterling Tracker.">
   <title>Sterling Logistics | Professional ETS2 VTC</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <header class="site-header">
-    <a class="brand" href="/"><span class="brand-mark">SL</span><span><b>Sterling</b><small>Logistics</small></span></a>
+    <a class="brand" href="/" aria-label="Sterling Logistics home"><span class="brand-mark">SL</span><span><b>Sterling</b><small>Logistics</small></span></a>
     <button class="menu" type="button" aria-label="Open navigation" data-menu>☰</button>
     <nav class="site-nav" data-nav>
       <a class="active" href="/">Home</a><a href="/about.html">Company</a><a href="/drivers.html">Drivers</a><a href="/jobs.html">Jobs</a><a href="/leaderboards.html">Leaderboards</a><a href="/convoys.html">Convoys</a><a href="/tracker.html">Tracker</a>
@@ -21,56 +21,79 @@
   <main>
     <section class="hero hero-home">
       <div class="hero-copy">
-        <span class="eyebrow"><i></i> Euro Truck Simulator 2 virtual trucking company</span>
-        <h1>Move freight.<br><em>Build a career.</em></h1>
-        <p class="lead">Sterling Logistics is a connected ETS2 VTC built around proper job history, live operations, driver progression and a tracker that keeps the road experience fast.</p>
-        <div class="hero-actions"><a class="button large" href="/recruitment.html">Drive with Sterling <span>→</span></a><a class="button ghost large" href="/tracker.html">Explore Sterling Tracker</a></div>
-        <div class="hero-proof"><span><b>Live</b> operations</span><span><b>Persistent</b> job history</span><span><b>Connected</b> Discord platform</span></div>
+        <span class="eyebrow"><i></i> Connected ETS2 operations</span>
+        <h1>Drive further.<br><em>Count every mile.</em></h1>
+        <p class="lead">Sterling Logistics is a modern ETS2 virtual trucking company built around serious operations, permanent driver records, meaningful progression and a tracker designed to feel instant on the road.</p>
+        <div class="hero-actions"><a class="button large" href="/recruitment.html">Join the fleet <span>→</span></a><a class="button ghost large" href="/tracker.html">Explore Sterling Tracker</a></div>
+        <div class="hero-proof"><span><b>Local-first</b> telemetry</span><span><b>Persistent</b> job history</span><span><b>Discord</b> identity</span><span><b>Live</b> company platform</span></div>
       </div>
-      <div class="operations-card">
-        <div class="ops-top"><span><i class="pulse"></i> STERLING OPERATIONS</span><b>LIVE PLATFORM</b></div>
-        <div class="route-visual"><span class="route-label">COMPANY NETWORK</span><div class="route-line"><i></i><i></i><i></i><i></i></div><div class="truck-orbit">S</div></div>
-        <div class="ops-grid"><div><small>Drivers online</small><strong data-stat="live">0</strong></div><div><small>Active drivers</small><strong data-stat="drivers">0</strong></div><div><small>Completed jobs</small><strong data-stat="jobs">0</strong></div><div><small>Company miles</small><strong data-stat="miles">0</strong></div></div>
-      </div>
+
+      <aside class="operations-card" aria-label="Sterling operations overview">
+        <div class="ops-top"><span><i class="pulse"></i> STERLING NETWORK</span><b>PLATFORM ONLINE</b></div>
+        <div class="route-visual">
+          <span class="route-label">EUROPEAN OPERATIONS GRID</span>
+          <div class="route-line"><i></i><i></i><i></i><i></i></div>
+          <div class="truck-orbit">S</div>
+        </div>
+        <div class="ops-grid">
+          <div><small>Drivers online</small><strong data-stat="live">0</strong></div>
+          <div><small>Active drivers</small><strong data-stat="drivers">0</strong></div>
+          <div><small>Completed jobs</small><strong data-stat="jobs">0</strong></div>
+          <div><small>Company miles</small><strong data-stat="miles">0</strong></div>
+        </div>
+      </aside>
     </section>
 
-    <section class="trust-strip"><span>STERLING TRACKER</span><span>LIVE OPERATIONS</span><span>DRIVER PROGRESSION</span><span>COMPANY JOB HISTORY</span><span>CONVOYS & EVENTS</span></section>
+    <section class="trust-strip" aria-label="Sterling platform capabilities">
+      <span>Sterling Tracker</span><span>Live operations</span><span>Driver careers</span><span>Company job history</span><span>Convoys & events</span><span>Discord integration</span>
+    </section>
 
     <section class="section split-intro">
-      <div><span class="eyebrow">The Sterling standard</span><h2>More than a VTC.<br><em>A connected operation.</em></h2></div>
-      <div class="body-copy"><p>Sterling is being built as one platform instead of a collection of disconnected tools. Tracker events, completed deliveries, driver records, Discord activity and the website are designed to share the same reliable backend data.</p><a class="text-link" href="/about.html">How Sterling works →</a></div>
+      <div><span class="eyebrow">One connected company</span><h2>Not a stats page.<br><em>A real driver platform.</em></h2></div>
+      <div class="body-copy"><p>Everything Sterling builds is designed to work as one operation. The tracker captures the right driving data, the backend keeps the permanent record, Discord receives meaningful events and the website becomes the public face and driver portal for the same company.</p><a class="text-link" href="/about.html">See how the platform fits together →</a></div>
     </section>
 
     <section class="section feature-grid">
-      <article class="feature featured"><span class="feature-number">01</span><div class="feature-icon">↗</div><h3>Permanent job history</h3><p>Completed deliveries become company records, not temporary entries trapped inside one PC.</p><a href="/jobs.html">View jobs →</a></article>
-      <article class="feature"><span class="feature-number">02</span><div class="feature-icon">◎</div><h3>Driver progression</h3><p>Distance, clean deliveries, earnings, DriveScore and achievements give every driver a meaningful career.</p><a href="/drivers.html">Meet the drivers →</a></article>
-      <article class="feature"><span class="feature-number">03</span><div class="feature-icon">⌁</div><h3>Real operations</h3><p>Tracker telemetry stays responsive locally while Sterling receives the events and job data that matter.</p><a href="/tracker.html">See the tracker →</a></article>
+      <article class="feature featured"><span class="feature-number">01</span><div class="feature-icon">↗</div><h3>Jobs that actually matter</h3><p>Started, delivered and cancelled loads are treated as company records, so your history survives beyond a single tracker session.</p><a href="/jobs.html">Explore company jobs →</a></article>
+      <article class="feature"><span class="feature-number">02</span><div class="feature-icon">◎</div><h3>A proper driver career</h3><p>Ranks, distance, earnings, clean deliveries, achievements and DriveScore give drivers something real to build over time.</p><a href="/drivers.html">Explore the driver platform →</a></article>
+      <article class="feature"><span class="feature-number">03</span><div class="feature-icon">⌁</div><h3>Fast in the cab</h3><p>Sterling Tracker keeps ETS2 telemetry local and responsive while server communication runs separately in the background.</p><a href="/tracker.html">Discover Sterling Tracker →</a></article>
     </section>
 
     <section class="section dark-panel">
-      <div class="panel-copy"><span class="eyebrow">Company operations</span><h2>Every load adds to<br><em>the Sterling story.</em></h2><p>Once the live API is connected on the web host, these figures and recent loads will be driven by the same backend used by Sterling Tracker and the Discord bot.</p><div class="metric-row"><div><strong data-stat="jobs">0</strong><span>Jobs completed</span></div><div><strong data-stat="miles">0</strong><span>Miles recorded</span></div><div><strong data-stat="drivers">0</strong><span>Drivers</span></div></div></div>
-      <div class="activity-card"><div class="card-title"><span>Latest company activity</span><small>RECENT LOADS</small></div><div id="activity-list" class="activity-list"><div class="activity-item"><div class="activity-icon">S</div><div><b>Live activity connection pending</b><span>The public site is online; backend data is the next connection stage.</span></div></div></div></div>
+      <div class="panel-copy">
+        <span class="eyebrow">Operations centre</span>
+        <h2>Every delivery becomes<br><em>part of the company.</em></h2>
+        <p>The website is designed around Sterling's backend as the source of truth. As live services come online, company figures, job activity and driver status can update from the same records used by the tracker and Discord bot.</p>
+        <div class="metric-row"><div><strong data-stat="jobs">0</strong><span>Jobs completed</span></div><div><strong data-stat="miles">0</strong><span>Miles recorded</span></div><div><strong data-stat="drivers">0</strong><span>Registered drivers</span></div></div>
+      </div>
+      <div class="activity-card"><div class="card-title"><span>Latest company activity</span><small>RECENT LOADS</small></div><div id="activity-list" class="activity-list"><div class="activity-item"><div class="activity-icon">S</div><div><b>Operations feed ready</b><span>Live backend activity will populate this board automatically.</span></div></div></div></div>
     </section>
 
     <section class="section page-teasers">
-      <a class="teaser-card" href="/leaderboards.html"><span>Performance</span><h3>Leaderboards</h3><p>Distance, jobs, revenue, DriveScore and clean deliveries.</p><b>Explore rankings →</b></a>
-      <a class="teaser-card" href="/convoys.html"><span>Community</span><h3>Convoys & events</h3><p>Upcoming routes, server information, attendance and event history.</p><b>View convoys →</b></a>
-      <a class="teaser-card" href="/tracker.html"><span>Windows app</span><h3>Sterling Tracker</h3><p>Fast local ETS2 telemetry with connected Sterling job tracking.</p><b>Discover Tracker →</b></a>
-      <a class="teaser-card" href="/recruitment.html"><span>Join the fleet</span><h3>Recruitment</h3><p>See what Sterling expects and what drivers get in return.</p><b>Apply to join →</b></a>
+      <a class="teaser-card" href="/leaderboards.html"><span>Performance</span><h3>Leaderboards</h3><p>Distance, jobs, revenue, DriveScore, clean deliveries and monthly performance.</p><b>View rankings →</b></a>
+      <a class="teaser-card" href="/convoys.html"><span>Community</span><h3>Convoys</h3><p>Upcoming routes, server information, attendance and completed event history.</p><b>Open convoy centre →</b></a>
+      <a class="teaser-card" href="/tracker.html"><span>Windows app</span><h3>Sterling Tracker</h3><p>Responsive ETS2 telemetry with connected job tracking and company events.</p><b>Explore Tracker →</b></a>
+      <a class="teaser-card" href="/recruitment.html"><span>Join the fleet</span><h3>Recruitment</h3><p>Join a VTC focused on quality driving, clean records and a professional community.</p><b>Apply to Sterling →</b></a>
     </section>
 
     <section class="section convoy-section">
-      <div class="section-heading"><span class="eyebrow">Upcoming operations</span><h2>Better roads are<br><em>shared roads.</em></h2></div>
+      <div class="section-heading"><span class="eyebrow">Scheduled operations</span><h2>Convoys worth<br><em>showing up for.</em></h2><p class="lead">Organised routes, clear event information and a proper company record of the convoys Sterling completes together.</p></div>
       <div id="convoy-grid" class="convoy-grid"><article class="convoy-card empty"><span>No convoy has been published through the live backend yet.</span></article></div>
       <div class="section-action"><a class="button ghost" href="/convoys.html">Open convoy centre</a></div>
     </section>
 
     <section class="section tracker-showcase">
-      <div class="tracker-window"><div class="window-bar"><span><i></i><i></i><i></i></span><b>STERLING TRACKER</b><small>CONNECTED</small></div><div class="tracker-layout"><aside><div class="mini-brand">S</div><i></i><i></i><i></i><i></i></aside><div class="tracker-main"><span class="eyebrow">LIVE TELEMETRY</span><div class="speed">57<small>MPH</small></div><div class="gauges"><span>1,340<small>RPM</small></span><span>62<small>LIMIT</small></span><span>D12<small>GEAR</small></span></div><div class="tracker-job"><small>CURRENT DELIVERY</small><b>Industrial Equipment</b><span>Rotterdam <i>→</i> Manchester</span></div></div></div></div>
-      <div class="tracker-copy"><span class="eyebrow">Sterling Tracker</span><h2>Local speed.<br><em>Connected records.</em></h2><p>The tracker reads ETS2 locally for responsive gauges. Backend communication happens separately, so internet latency never needs to make the in-cab experience sluggish.</p><div class="tracker-points"><span>Direct ETS2 telemetry architecture</span><span>Automatic job lifecycle tracking</span><span>Meaningful Discord events</span><span>Persistent company history</span></div><a class="button large" href="/tracker.html">Tracker details & downloads <span>→</span></a></div>
+      <div class="tracker-window" aria-label="Sterling Tracker preview">
+        <div class="window-bar"><span><i></i><i></i><i></i></span><b>STERLING TRACKER</b><small>CONNECTED</small></div>
+        <div class="tracker-layout"><aside><div class="mini-brand">S</div><i></i><i></i><i></i><i></i></aside><div class="tracker-main"><span class="eyebrow">LIVE TELEMETRY</span><div class="speed">57<small>MPH</small></div><div class="gauges"><span>1,340<small>RPM</small></span><span>62<small>LIMIT</small></span><span>D12<small>GEAR</small></span></div><div class="tracker-job"><small>CURRENT DELIVERY</small><b>Industrial Equipment</b><span>Rotterdam <i>→</i> Manchester</span></div></div></div>
+      </div>
+      <div class="tracker-copy"><span class="eyebrow">Sterling Tracker</span><h2>Instant locally.<br><em>Connected globally.</em></h2><p>Local gauges should feel immediate. Company data should be durable. Sterling separates those responsibilities so internet latency never needs to slow down the in-cab experience.</p><div class="tracker-points"><span>Direct ETS2 telemetry architecture</span><span>Automatic job lifecycle tracking</span><span>Meaningful Discord events</span><span>Persistent backend history</span></div><a class="button large" href="/tracker.html">Tracker details & downloads <span>→</span></a></div>
     </section>
 
-    <section class="section recruitment-banner"><div><span class="eyebrow">Recruitment</span><h2>Your next load<br><em>could count for more.</em></h2><p>Join a VTC where your deliveries, consistency and progression become part of a permanent Sterling career.</p></div><div class="recruit-actions"><a class="button large" href="/recruitment.html">Join Sterling <span>→</span></a><a class="button ghost large" href="/drivers.html">Explore the fleet</a></div></section>
+    <section class="section recruitment-banner">
+      <div><span class="eyebrow">Sterling recruitment</span><h2>Build your record.<br><em>Earn your place.</em></h2><p>Join a growing VTC where quality driving, consistency and participation are visible and where your completed work becomes part of a permanent Sterling career.</p></div>
+      <div class="recruit-actions"><a class="button large" href="/recruitment.html">Join Sterling <span>→</span></a><a class="button ghost large" href="/drivers.html">Explore the fleet</a></div>
+    </section>
   </main>
 
   <footer class="site-footer">
