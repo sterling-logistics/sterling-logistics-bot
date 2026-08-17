@@ -4,6 +4,7 @@ import {initDatabase,pingDatabase} from "./src/database/mysql.js";
 import {ensureEconomySchema} from "./src/economy/service.js";
 import {ensureWebsiteSchema,registerWebsiteRoutes} from "./src/web/site.js";
 import {ensureApplicationSchema,registerApplicationRoutes} from "./src/web/applications.js";
+import {registerPublicLiveRoutes} from "./src/web/public-live.js";
 
 dotenv.config();
 
@@ -35,6 +36,7 @@ const app=express();
 app.set("trust proxy",1);
 app.use(express.json({limit:"256kb"}));
 registerApplicationRoutes(app,config);
+registerPublicLiveRoutes(app);
 registerWebsiteRoutes(app,config);
 app.get("/health",async(_req,res)=>{
   try{const d=await pingDatabase();res.json({ok:true,service:"sterling-web",database:d.db});}
