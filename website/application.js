@@ -1,0 +1,20 @@
+const applicationForm=document.querySelector('#sterling-application');
+const progressBar=document.querySelector('#application-progress');
+const progressText=document.querySelector('#application-progress-text');
+const statusBox=document.querySelector('#application-status');
+const draftKey='sterling_application_draft_v1';
+const discordInvite='https://discord.gg/fXkxccZNmp';
+const requiredFields=['discordUsername','age','country','ets2Hours','truckersMp','availability','whySterling','experience','agreementRules','agreementTruth'];
+const fields=()=>[...applicationForm.querySelectorAll('input,select,textarea')].filter(x=>x.name&&!x.classList.contains('honeypot'));
+function updateProgress(){let done=0;requiredFields.forEach(name=>{const el=applicationForm.elements[name];if(!el)return;if((el.type==='checkbox'&&el.checked)||(el.type!=='checkbox'&&String(el.value||'').trim()))done++});const pct=Math.round(done/requiredFields.length*100);progressBar.style.width=`${pct}%`;progressText.textContent=`${pct}% complete`}
+function saveDraft(){const data={};fields().forEach(el=>{data[el.name]=el.type==='checkbox'?el.checked:el.value});localStorage.setItem(draftKey,JSON.stringify(data));updateProgress()}
+function loadDraft(){try{const data=JSON.parse(localStorage.getItem(draftKey)||'{}');fields().forEach(el=>{if(!(el.name in data))return;if(el.type==='checkbox')el.checked=Boolean(data[el.name]);else el.value=data[el.name]});}catch{}updateProgress();updateCounts()}
+function updateCounts(){applicationForm.querySelectorAll('textarea[maxlength]').forEach(el=>{const out=applicationForm.querySelector(`[data-count="${el.name}"]`);if(out)out.textContent=`${el.value.length} / ${el.maxLength}`})}
+function showStatus(message,type){statusBox.textContent=message;statusBox.className=`application-status show ${type}`;statusBox.scrollIntoView({behavior:'smooth',block:'nearest'})}
+function validate(){let ok=true;applicationForm.querySelectorAll('.field').forEach(x=>x.classList.remove('invalid'));requiredFields.forEach(name=>{const el=applicationForm.elements[name];if(!el)return;const valid=el.type==='checkbox'?el.checked:String(el.value||'').trim().length>0;if(!valid){ok=false;el.closest('.field,.check-row')?.classList.add('invalid')}});const age=Number(applicationForm.elements.age.value);if(age<13||age>99){ok=false;applicationForm.elements.age.closest('.field')?.classList.add('invalid')}return ok}
+function payload(){const data={};fields().forEach(el=>{data[el.name]=el.type==='checkbox'?el.checked:String(el.value||'').trim()});return data}
+applicationForm?.addEventListener('input',()=>{saveDraft();updateCounts()});
+applicationForm?.addEventListener('change',saveDraft);
+applicationForm?.addEventListener('submit',async e=>{e.preventDefault();if(!validate()){showStatus('Please complete every required field before submitting your application.','error');return}const button=applicationForm.querySelector('[type="submit"]');button.disabled=true;button.textContent='Submitting…';try{const r=await fetch('/api/public/applications',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload())});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||'Application service unavailable');localStorage.removeItem(draftKey);applicationForm.reset();updateProgress();updateCounts();showStatus(`Application ${data.applicationCode||''} submitted successfully. Join our Discord so the recruitment team can contact you.`,'success');setTimeout(()=>{window.open(discordInvite,'_blank','noopener')},900)}catch(err){showStatus('Your application could not reach the Sterling recruitment service right now. Your answers are saved on this device, so nothing has been lost. Join Discord and tell staff your application is ready to submit.','error')}finally{button.disabled=false;button.textContent='Submit application →'}});
+document.querySelector('#clear-draft')?.addEventListener('click',()=>{if(confirm('Clear your saved application draft?')){localStorage.removeItem(draftKey);applicationForm.reset();updateProgress();updateCounts()}});
+loadDraft();
