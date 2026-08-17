@@ -1,0 +1,43 @@
+name: Deploy Sterling Website to Sparked
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'website/**'
+      - '.github/workflows/deploy-website-ftp.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: sterling-website-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Validate website files
+        run: |
+          test -f website/index.html
+          test -f website/styles.css
+          test -f website/app.js
+          test -f website/dashboard.html
+          test -f website/dashboard.js
+
+      - name: Deploy website to Sparked FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.4.0
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftp
+          port: 21
+          local-dir: ./website/
+          server-dir: ./
+          log-level: standard
