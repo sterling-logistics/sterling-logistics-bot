@@ -3,6 +3,7 @@ import express from "express";
 import {initDatabase,pingDatabase} from "./src/database/mysql.js";
 import {ensureEconomySchema} from "./src/economy/service.js";
 import {ensureWebsiteSchema,registerWebsiteRoutes} from "./src/web/site.js";
+import {ensureApplicationSchema,registerApplicationRoutes} from "./src/web/applications.js";
 
 dotenv.config();
 
@@ -27,11 +28,13 @@ const config={
 initDatabase(config.db);
 await pingDatabase();
 await ensureWebsiteSchema();
+await ensureApplicationSchema();
 await ensureEconomySchema();
 
 const app=express();
 app.set("trust proxy",1);
 app.use(express.json({limit:"256kb"}));
+registerApplicationRoutes(app,config);
 registerWebsiteRoutes(app,config);
 app.get("/health",async(_req,res)=>{
   try{const d=await pingDatabase();res.json({ok:true,service:"sterling-web",database:d.db});}
