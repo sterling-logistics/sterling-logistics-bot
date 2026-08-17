@@ -1,0 +1,36 @@
+:root{--mx:50%;--my:28%;--scroll-shift:0px}
+html{background:#05070a}
+body{position:relative;isolation:isolate;overflow-x:hidden;background:linear-gradient(180deg,rgba(5,7,10,.62),rgba(5,7,10,.92) 55%,#05070a 100%)}
+body:before{z-index:-6!important;opacity:1!important;background:radial-gradient(900px 600px at var(--mx) var(--my),rgba(40,167,245,.16),transparent 64%),radial-gradient(760px 500px at 8% 18%,rgba(26,99,155,.15),transparent 68%),radial-gradient(800px 580px at 92% 70%,rgba(17,87,139,.12),transparent 68%),linear-gradient(145deg,#07131e 0%,#05080c 46%,#07111a 100%)!important;animation:sterlingAurora 16s ease-in-out infinite alternate}
+body:after{z-index:-5!important;opacity:.26!important;background-image:linear-gradient(rgba(113,193,245,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(113,193,245,.04) 1px,transparent 1px)!important;background-size:78px 78px!important;background-position:0 var(--scroll-shift)!important;transform:perspective(800px) rotateX(64deg) scale(1.8) translateY(24vh);transform-origin:center bottom;mask-image:linear-gradient(to bottom,transparent 4%,#000 38%,rgba(0,0,0,.8) 70%,transparent 96%)!important;animation:sterlingGrid 24s linear infinite}
+.live-sky{position:fixed;inset:0;z-index:-4;pointer-events:none;overflow:hidden}
+.live-sky:before,.live-sky:after{content:"";position:absolute;inset:-20%;background:conic-gradient(from 210deg at 50% 50%,transparent 0 25%,rgba(45,171,244,.055) 31%,transparent 37% 63%,rgba(61,138,203,.045) 70%,transparent 77%);filter:blur(48px);animation:sterlingSweep 28s linear infinite}
+.live-sky:after{animation-direction:reverse;animation-duration:38s;opacity:.65;transform:scale(1.15)}
+.live-dot{position:absolute;width:3px;height:3px;border-radius:50%;background:#75ccfb;box-shadow:0 0 12px rgba(84,193,255,.9);opacity:.22;animation:sterlingDrift var(--dur,18s) linear infinite;animation-delay:var(--delay,0s)}
+.live-route{position:absolute;height:1px;width:min(34vw,520px);background:linear-gradient(90deg,transparent,rgba(78,183,245,.38),rgba(147,220,255,.7),transparent);filter:drop-shadow(0 0 7px rgba(54,170,239,.38));opacity:.16;transform:rotate(var(--angle,-12deg));animation:sterlingRoute var(--route-dur,16s) ease-in-out infinite}
+.live-vignette{position:fixed;inset:0;z-index:-3;pointer-events:none;background:linear-gradient(90deg,rgba(3,6,9,.65),transparent 25%,transparent 75%,rgba(3,6,9,.55)),linear-gradient(180deg,transparent 0 74%,rgba(3,5,8,.8));}
+.site-header{box-shadow:0 14px 50px rgba(0,0,0,.16)}
+.hero-home:after{content:"";position:absolute;right:1%;top:14%;width:52%;height:72%;z-index:-1;background:radial-gradient(ellipse at center,rgba(42,167,245,.105),transparent 62%);filter:blur(8px);animation:sterlingHeroGlow 7s ease-in-out infinite alternate}
+.operations-card,.dark-panel,.tracker-window,.feature,.teaser-card,.convoy-card,.listing-card,.rank-card,.contact-card,.timeline-item,.dash-panel,.driver-card,.stat-card{backdrop-filter:blur(12px) saturate(112%)}
+.operations-card:after,.dark-panel:after,.tracker-window:after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:inherit;background:linear-gradient(115deg,transparent 20%,rgba(255,255,255,.035) 44%,transparent 60%);transform:translateX(-130%);animation:sterlingGlass 11s ease-in-out infinite}
+.operations-card,.dark-panel,.tracker-window{position:relative;overflow:hidden}
+.button:not(.ghost){position:relative;overflow:hidden}.button:not(.ghost):after{content:"";position:absolute;top:-80%;bottom:-80%;width:24px;left:-44px;background:rgba(255,255,255,.26);transform:rotate(22deg);filter:blur(2px);transition:left .55s ease}.button:not(.ghost):hover:after{left:calc(100% + 44px)}
+.brand-mark{animation:sterlingBrandPulse 5s ease-in-out infinite}
+.pulse{animation:sterlingPulse 1.8s ease-in-out infinite}
+.route-line{background-size:220% 100%!important;animation:sterlingFlow 4.8s linear infinite}.route-line i{animation:sterlingNode 2.8s ease-in-out infinite}.route-line i:nth-child(2){animation-delay:.5s}.route-line i:nth-child(3){animation-delay:1s}.route-line i:nth-child(4){animation-delay:1.5s}
+.trust-strip{background:rgba(6,10,15,.68)!important;backdrop-filter:blur(16px)}
+.feature,.teaser-card,.convoy-card,.listing-card,.contact-card,.rank-card{box-shadow:0 18px 50px rgba(0,0,0,.12)}
+.feature:hover,.teaser-card:hover,.convoy-card:hover,.listing-card:hover,.contact-card:hover,.rank-card:hover{box-shadow:0 24px 65px rgba(0,0,0,.28),0 0 0 1px rgba(74,183,247,.08),0 0 38px rgba(24,118,179,.06)}
+@keyframes sterlingAurora{0%{background-position:0 0;filter:saturate(1)}100%{background-position:4vw -3vh;filter:saturate(1.14)}}
+@keyframes sterlingGrid{from{background-position:0 0}to{background-position:78px 78px}}
+@keyframes sterlingSweep{to{transform:rotate(360deg)}}
+@keyframes sterlingDrift{0%{transform:translate3d(-8vw,12vh,0) scale(.7);opacity:0}12%{opacity:.28}80%{opacity:.18}100%{transform:translate3d(108vw,-26vh,0) scale(1.15);opacity:0}}
+@keyframes sterlingRoute{0%,100%{transform:translate3d(-8vw,0,0) rotate(var(--angle,-12deg));opacity:0}20%{opacity:.14}50%{opacity:.25}80%{opacity:.12}100%{transform:translate3d(108vw,-12vh,0) rotate(var(--angle,-12deg));opacity:0}}
+@keyframes sterlingHeroGlow{from{opacity:.55;transform:scale(.94)}to{opacity:1;transform:scale(1.07)}}
+@keyframes sterlingGlass{0%,56%{transform:translateX(-130%)}74%,100%{transform:translateX(130%)}}
+@keyframes sterlingBrandPulse{0%,100%{box-shadow:inset 0 0 0 1px rgba(255,255,255,.03),0 10px 28px rgba(0,0,0,.3)}50%{box-shadow:inset 0 0 0 1px rgba(255,255,255,.04),0 10px 28px rgba(0,0,0,.3),0 0 26px rgba(42,167,245,.11)}}
+@keyframes sterlingPulse{0%,100%{box-shadow:0 0 9px rgba(94,224,160,.5)}50%{box-shadow:0 0 20px rgba(94,224,160,1)}}
+@keyframes sterlingFlow{from{background-position:0 0}to{background-position:220% 0}}
+@keyframes sterlingNode{0%,100%{box-shadow:0 0 9px rgba(89,190,248,.25)}50%{box-shadow:0 0 20px rgba(89,190,248,.75)}}
+@media(max-width:780px){body:after{transform:perspective(700px) rotateX(67deg) scale(2.25) translateY(20vh);opacity:.18!important}.live-route{width:70vw}.hero-home:after{width:100%;right:0}.operations-card,.dark-panel,.tracker-window,.feature,.teaser-card{backdrop-filter:blur(8px)}}
+@media(prefers-reduced-motion:reduce){body:before,body:after,.live-sky:before,.live-sky:after,.live-dot,.live-route,.hero-home:after,.operations-card:after,.dark-panel:after,.tracker-window:after,.brand-mark,.pulse,.route-line,.route-line i{animation:none!important}.live-dot,.live-route{display:none!important}}
