@@ -4,6 +4,9 @@ import {fileURLToPath} from "node:url";
 import express from "express";
 import {db} from "../database/mysql.js";
 import {calculateDriveScore,getDriverEconomy} from "../economy/service.js";
+import {authenticateTracker} from "../telemetry/service.js";
+import {authenticateDesktopSession} from "../auth/desktop.js";
+import {registerPublicLiveRoutes} from "./public-live.js";
 
 const __dirname=path.dirname(fileURLToPath(import.meta.url));
 const publicDir=path.resolve(__dirname,"../../website");
@@ -40,6 +43,13 @@ async function webSession(req){
   return r[0];
 }
 
+async function trackerSession(req){
+  const auth=String(req.headers.authorization||"");
+  const token=auth.startsWith("Bearer ")?auth.slice(7):"";
+  if(!token)return null;
+  return(await authenticateTracker(token))||(await authenticateDesktopSession(token));
+}
+
 function setSessionCookie(res,token,c){
   const secure=String(c.publicBaseUrl||"").startsWith("https://");
   res.setHeader("Set-Cookie",`${cookieName}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60*60*24*7}${secure?"; Secure":""}`);
@@ -48,6 +58,7 @@ function clearSessionCookie(res,c){const secure=String(c.publicBaseUrl||"").star
 
 export function registerWebsiteRoutes(app,c){
   app.use(express.static(publicDir,{extensions:["html"],index:"index.html"}));
+  registerPublicLiveRoutes(app);
 
   app.get("/api/public/overview",async(_req,res)=>{
     try{
@@ -60,6 +71,7 @@ export function registerWebsiteRoutes(app,c){
         db().query(`SELECT j.id,j.completed_at,j.cargo,j.origin_city,j.destination_city,j.distance_miles,j.income,d.sterling_driver_id,d.discord_username
           FROM jobs j JOIN drivers d ON d.id=j.driver_id WHERE j.status='completed' ORDER BY COALESCE(j.completed_at,j.created_at) DESC LIMIT 6`)
       ]);
+      res.setHeader("Cache-Control","no-store");
       res.json({ok:true,stats:{drivers:Number(drivers[0]?.count||0),jobs:Number(jobs[0]?.count||0),miles:Number(distance[0]?.miles||0),live:Number(live[0]?.count||0)},convoys,activity});
     }catch(e){res.status(500).json({ok:false,error:"Company data is temporarily unavailable"});}
   });
@@ -75,7 +87,7 @@ export function registerWebsiteRoutes(app,c){
       const url=new URL("https://discord.com/oauth2/authorize");
       url.searchParams.set("client_id",c.applicationId);url.searchParams.set("response_type","code");url.searchParams.set("redirect_uri",redirectUri);url.searchParams.set("scope","identify");url.searchParams.set("state",state);
       res.redirect(url.toString());
-    }catch(e){res.status(500).send("Could not start Discord sign in.");}
+    }catch(e){console.error("[Website OAuth Start]",e);res.status(500).send("Could not start Discord sign in.");}
   });
 
   app.get("/auth/web/discord/callback",async(req,res)=>{
@@ -108,13 +120,22 @@ export function registerWebsiteRoutes(app,c){
       const d=await webSession(req);if(!d)return res.status(401).json({ok:false,error:"Not signed in"});
       const[[liveRows],[jobRows],score,economy,[achievementRows]]=await Promise.all([
         db().execute("SELECT * FROM live_telemetry WHERE driver_id=? LIMIT 1",[d.id]),
-        db().execute("SELECT * FROM jobs WHERE driver_id=? ORDER BY COALESCE(completed_at,created_at) DESC LIMIT 10",[d.id]),
+        db().execute("SELECT * FROM jobs WHERE driver_id=? ORDER BY COALESCE(completed_at,created_at) DESC LIMIT 25",[d.id]),
         calculateDriveScore(d.id),getDriverEconomy(d.id),
         db().execute("SELECT name,description,awarded_at FROM achievements WHERE driver_id=? ORDER BY awarded_at DESC LIMIT 8",[d.id])
       ]);
       const live=liveRows[0]||null;let raw={};try{raw=typeof live?.raw_json==="string"?JSON.parse(live.raw_json):(live?.raw_json||{});}catch{}
-      res.json({ok:true,driver:{sterlingDriverId:d.sterling_driver_id,discordId:d.discord_id,name:d.discord_username,avatar:avatarUrl(d.discord_id,d.discord_avatar),rank:d.rank_name,status:d.status,totalMiles:Number(d.total_miles||0),monthlyMiles:Number(d.monthly_miles||0),jobsCompleted:Number(d.jobs_completed||0),totalIncome:Number(d.total_income||0),driveScore:score,economy},live:live?{status:live.status,truck:live.truck,cargo:live.cargo,origin:live.source_city,destination:live.destination_city,speedMph:Number(live.speed_mph||0),lastSeenAt:live.last_seen_at,distanceKm:Number(raw.distanceKm||0),revenue:Number(raw.revenue||0),truckDamage:Number(raw.truckDamage||0),cargoDamage:Number(raw.cargoDamage||0)}:null,jobs:jobRows,achievements:achievementRows});
+      res.setHeader("Cache-Control","no-store");
+      res.json({ok:true,serverTime:new Date().toISOString(),driver:{sterlingDriverId:d.sterling_driver_id,discordId:d.discord_id,name:d.discord_username,avatar:avatarUrl(d.discord_id,d.discord_avatar),rank:d.rank_name,status:d.status,totalMiles:Number(d.total_miles||0),monthlyMiles:Number(d.monthly_miles||0),jobsCompleted:Number(d.jobs_completed||0),totalIncome:Number(d.total_income||0),driveScore:score,economy},live:live?{status:live.status,truck:live.truck,cargo:live.cargo,origin:live.source_city,destination:live.destination_city,speedMph:Number(live.speed_mph||0),lastSeenAt:live.last_seen_at,distanceKm:Number(raw.distanceKm||0),revenue:Number(raw.revenue||0),engineRpm:Number(raw.engineRpm||0),speedLimitMph:Number(raw.speedLimitMph||0),fuelLiters:Number(raw.fuelLiters||0),truckDamage:Number(raw.truckDamage||0),trailerDamage:Number(raw.trailerDamage||0),cargoDamage:Number(raw.cargoDamage||0),onJob:Boolean(raw.onJob)}:null,jobs:jobRows,achievements:achievementRows});
     }catch(e){console.error("[Website Me]",e);res.status(500).json({ok:false,error:"Could not load driver dashboard"});}
+  });
+
+  app.get("/api/tracker/jobs",async(req,res)=>{
+    try{
+      const d=await trackerSession(req);if(!d)return res.status(401).json({ok:false,error:"Invalid tracker session"});
+      const[rows]=await db().execute(`SELECT job_code,status,truck_model,cargo,origin_city,destination_city,distance_miles,income,truck_damage,trailer_damage,cargo_damage,started_at,completed_at,created_at FROM jobs WHERE driver_id=? ORDER BY COALESCE(completed_at,created_at) DESC LIMIT 100`,[d.driver_id]);
+      res.setHeader("Cache-Control","no-store");res.json({ok:true,jobs:rows});
+    }catch(e){console.error("[Tracker Jobs]",e);res.status(500).json({ok:false,error:"Could not load tracker job history"});}
   });
 
   app.get("/downloads/tracker",async(_req,res)=>{
