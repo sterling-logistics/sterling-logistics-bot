@@ -39,7 +39,6 @@ public partial class MainWindow
             page = "Dashboard";
             selected = DashboardPage;
         }
-        if (page == "Jobs History") RenderJobHistory();
         selected.Visibility = Visibility.Visible;
 
         PageTitleText.Text = page;
@@ -50,7 +49,7 @@ public partial class MainWindow
             "Current Job" => "Your active delivery route cargo value and driver share",
             "Driver Profile" => "Sterling identity rank truck and connection status",
             "DriveScore" => "Driving performance safety and efficiency overview",
-            "Jobs History" => "Completed ETS2 deliveries saved automatically by Sterling Tracker",
+            "Jobs History" => "Permanent Sterling delivery history synchronized from the server",
             "Finances" => "Driver earnings current job share and company tracking",
             "Convoys" => "Sterling convoy operations and live-session readiness",
             "Settings" => "Tracker connection account telemetry and startup settings",
@@ -64,11 +63,13 @@ public partial class MainWindow
             "Current Job" => $"Current Job • {RouteText.Text} • {CargoText.Text}",
             "Driver Profile" => $"Driver Profile • {DriverNameText.Text} • {RankText.Text}",
             "DriveScore" => "DriveScore • performance updates while you drive",
-            "Jobs History" => $"Jobs History • {localJobHistory.Count} completed job{(localJobHistory.Count == 1 ? "" : "s")} saved",
+            "Jobs History" => "Jobs History • syncing with Sterling server",
             "Finances" => $"Finances • estimated current driver share {DriverShareText.Text}",
             "Convoys" => "Convoys • Sterling multiplayer operations",
             "Settings" => "Settings • tracker configuration",
             _ => page
         };
+
+        if (page.Equals("Jobs History", StringComparison.OrdinalIgnoreCase)) _ = RefreshServerJobHistory();
     }
 }
