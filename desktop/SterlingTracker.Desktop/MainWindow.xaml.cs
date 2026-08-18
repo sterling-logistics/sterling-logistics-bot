@@ -16,9 +16,7 @@ namespace SterlingTracker.Desktop;
 public partial class MainWindow : Window
 {
     readonly HttpClient apiHttp = new() { Timeout = TimeSpan.FromSeconds(8) };
-    readonly HttpClient telemetryHttp = new() { Timeout = TimeSpan.FromMilliseconds(400) };
     readonly string settingsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Sterling Logistics", "tracker.json");
-    const string TelemetryUrl = "http://127.0.0.1:6969/";
     const string ApiBase = "http://45.43.163.175:8101";
     readonly string sessionCode = $"desktop-{Environment.MachineName}-{Guid.NewGuid():N}";
     readonly Dictionary<string, bool> lastFlags = new();
@@ -32,12 +30,10 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        telemetryHttp.DefaultRequestHeaders.CacheControl = new CacheControlHeaderValue { NoCache = true, NoStore = true };
-        telemetryHttp.DefaultRequestHeaders.Pragma.ParseAdd("no-cache");
         foreach (var n in new[] { "JobDelivered", "JobCancelled", "Refuel", "RefuelPayed", "Fined", "Tollgate", "Ferry", "Train" }) lastFlags[n] = false;
         LoadSettings();
-        Loaded += async (_, _) => { await RefreshIdentity(); _ = LiveLoop(); };
-        Closed += (_, _) => running = false;
+        Loaded += async (_, _) => { await RefreshIdentity(); _ = DirectLiveLoop(); };
+        Closed += (_, _) => { running = false; directTelemetry.Dispose(); };
     }
 
     void LoadSettings()
@@ -123,65 +119,6 @@ public partial class MainWindow : Window
         DriverNameText.Text = "Not signed in"; DriverIdText.Text = "—"; RankText.Text = "—"; ConnectionText.Text = "Offline"; AccountButton.Content = "Sign in with Discord";
     }
 
-    async Task LiveLoop()
-    {
-        // Local dashboard is intentionally independent of cloud uploads.
-        // 50 ms target = 20 refreshes per second for speed/RPM/limit/fuel/gear.
-        while (running)
-        {
-            var frame = Stopwatch.StartNew();
-            try
-            {
-                if ((DateTime.UtcNow - lastGameCheckAt).TotalMilliseconds >= 2000)
-                {
-                    gameRunning = Process.GetProcessesByName("eurotrucks2").Length > 0;
-                    lastGameCheckAt = DateTime.UtcNow;
-                }
-
-                if (!gameRunning)
-                {
-                    GameText.Text = "ETS2 not detected"; TelemetryText.Text = "Waiting for game"; LiveStateText.Text = "WAITING"; PingText.Text = "—";
-                    ConnectionText.Text = string.IsNullOrWhiteSpace(sessionToken) ? "Offline" : "Connected";
-                    await Task.Delay(250); continue;
-                }
-
-                GameText.Text = "ETS2 detected";
-                // Unique query string + no-cache headers prevents any HTTP/proxy cache from replaying stale frames.
-                var url = TelemetryUrl + "?frame=" + Environment.TickCount64;
-                using var response = await telemetryHttp.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
-                response.EnsureSuccessStatusCode();
-                var json = await response.Content.ReadAsStringAsync();
-                using var doc = JsonDocument.Parse(json);
-                var raw = doc.RootElement.Clone();
-
-                if (!BoolAny(raw, "SdkActive"))
-                {
-                    TelemetryText.Text = "SDK waiting"; LiveStateText.Text = "SDK WAITING"; PingText.Text = $"{frame.ElapsedMilliseconds} ms";
-                    await Task.Delay(100); continue;
-                }
-
-                UpdateUi(raw);
-                TelemetryText.Text = "Live telemetry active"; LiveStateText.Text = "LIVE"; PingText.Text = $"{frame.ElapsedMilliseconds} ms";
-                LastUpdatedText.Text = DateTime.Now.ToString("HH:mm:ss.fff");
-
-                // Cloud upload is throttled separately and never blocks local live gauges.
-                if (!string.IsNullOrWhiteSpace(sessionToken) && !uploadBusy && (DateTime.UtcNow - lastUploadAt).TotalMilliseconds >= 500)
-                {
-                    lastUploadAt = DateTime.UtcNow; uploadBusy = true; _ = UploadCycle(raw);
-                }
-            }
-            catch (Exception ex)
-            {
-                TelemetryText.Text = "Telemetry reconnecting"; LiveStateText.Text = "RECONNECTING"; PingText.Text = "—";
-                FooterText.Text = ex.Message.Length > 110 ? ex.Message[..110] : ex.Message;
-            }
-
-            var wait = 50 - (int)frame.ElapsedMilliseconds;
-            if (wait > 0) await Task.Delay(wait);
-            else await Task.Yield();
-        }
-    }
-
     async Task UploadCycle(JsonElement raw)
     {
         try { await DetectAndSend(raw); }
@@ -231,7 +168,7 @@ public partial class MainWindow : Window
     {
         var speed = SpeedMps(d); SpeedText.Text = $"{speed * 2.2369362921:0} mph";
         var limit = FirstNum(d,"NavigationValues.SpeedLimit.Mph","NavigationValues.SpeedLimit.Value");
-        if (limit > 0 && limit < 40) limit *= 2.2369362921; // SDK may expose m/s in Value depending on telemetry version.
+        if (limit > 0 && limit < 40) limit *= 2.2369362921;
         SpeedLimitText.Text = limit > 0 ? $"{limit:0} mph" : "—";
         var rpm = FirstNum(d,"TruckValues.CurrentValues.DashboardValues.RPM","TruckValues.CurrentValues.EngineRpm","TruckValues.CurrentValues.EngineRPM");
         RpmText.Text = rpm > 0 ? $"{rpm:0}" : "0";
@@ -243,7 +180,7 @@ public partial class MainWindow : Window
         var cargo = StrAny(d,"JobValues.CargoValues.Name"); CargoText.Text = string.IsNullOrWhiteSpace(cargo) ? "No active delivery" : cargo;
         var src = StrAny(d,"JobValues.CitySource"); var dst = StrAny(d,"JobValues.CityDestination"); RouteText.Text = $"{(src.Length > 0 ? src : "—")}  →  {(dst.Length > 0 ? dst : "—")}";
         var km = FirstNum(d,"NavigationValues.NavigationDistance","JobValues.PlannedDistanceKm"); DistanceText.Text = km > 0 ? $"{(km > 10000 ? km / 1000.0 : km) * 0.621371:0} mi" : "—";
-        var income = NumAny(d,"JobValues.Income"); JobValueText.Text = income > 0 ? $"£{income:N0}" : "—"; DriverPayText.Text = income > 0 ? $"£{income * 0.35:N0}" : "—";
+        var income = NumAny(d,"JobValues.Income"); JobValueText.Text = income > 0 ? $"£{income:N0}" : "—"; DriverShareText.Text = income > 0 ? $"£{income * 0.35:N0}" : "—";
         JobStateText.Text = BoolAny(d,"SpecialEventsValues.OnJob") ? "IN PROGRESS" : "WAITING";
     }
 
