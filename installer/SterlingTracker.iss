@@ -1,5 +1,5 @@
 #define MyAppName "Sterling Tracker"
-#define MyAppVersion "2.3.0"
+#define MyAppVersion "2.3.2"
 #define MyAppPublisher "Sterling Logistics"
 #define MyAppExeName "SterlingTracker.exe"
 
@@ -15,7 +15,7 @@ DefaultDirName={localappdata}\Programs\Sterling Logistics\Tracker
 DefaultGroupName=Sterling Logistics
 DisableProgramGroupPage=yes
 OutputDir=..\dist
-OutputBaseFilename=SterlingTracker-2.3.0-Setup
+OutputBaseFilename=SterlingTracker-2.3.2-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -23,7 +23,7 @@ PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExeName}
-UninstallDisplayName="Sterling Tracker 2.3"
+UninstallDisplayName="Sterling Tracker 2.3.2"
 SetupIconFile=..\desktop\SterlingTracker.Desktop\Assets\SterlingTracker.ico
 SetupLogging=yes
 CloseApplications=yes
@@ -40,8 +40,8 @@ Source: "..\publish\SterlingTracker\*"; DestDir: "{app}"; Flags: ignoreversion r
 Source: "install-telemetry.ps1"; DestDir: "{app}\Telemetry"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\Sterling Tracker 2.3"; Filename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\Sterling Tracker 2.3"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autoprograms}\Sterling Tracker 2.3.2"; Filename: "{app}\{#MyAppExeName}"
+Name: "{autodesktop}\Sterling Tracker 2.3.2"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: unchecked
