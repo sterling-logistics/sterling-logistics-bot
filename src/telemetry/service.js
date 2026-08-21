@@ -75,7 +75,7 @@ export async function ingestTrackerTelemetry(driverId,p){
 
   let economy=null,progression=null;
   if(eventType==="job-delivered"){
-    try{economy=await queueTrackedJobForApproval(driverId,data,sessionId);}catch(e){console.error("[Job Approval Queue]",e);}
+    try{economy=await queueTrackedJobForApproval(driverId,data,sessionId,sessionCode);}catch(e){console.error("[Job Approval Queue]",e);}
   }else if(["fine","job-cancelled","crash","collision"].includes(eventType)||crashDetected){try{progression=await processDriverProgression(driverId);}catch(e){console.error("[Progression]",e);}}
 
   let dispatch=null;try{dispatch=await syncDispatchFromTelemetry(driverId,eventType,data);}catch(e){console.error("[Dispatch Sync]",e);}
