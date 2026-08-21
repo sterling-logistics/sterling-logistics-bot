@@ -1,3 +1,0 @@
-Sterling Logistics GitHub → Discord webhook test.
-Second test after moving webhook to #github-updates.
-Safe to delete after verification.
