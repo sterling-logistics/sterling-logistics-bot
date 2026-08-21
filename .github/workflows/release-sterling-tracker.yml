@@ -7,6 +7,11 @@ on:
       - 'desktop/SterlingTracker.Desktop/**'
       - 'installer/**'
       - '.github/workflows/release-sterling-tracker.yml'
+  pull_request:
+    paths:
+      - 'desktop/SterlingTracker.Desktop/**'
+      - 'installer/**'
+      - '.github/workflows/release-sterling-tracker.yml'
 
 permissions:
   contents: read
