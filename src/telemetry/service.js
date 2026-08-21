@@ -2,8 +2,9 @@ import crypto from "node:crypto";
 import {EmbedBuilder,MessageFlags} from "discord.js";
 import {db} from "../database/mysql.js";
 import {syncDispatchFromTelemetry} from "../dispatch/service.js";
-import {settleCompletedLoad,recordFuelExpense,recordFineExpense,calculateDriveScore,getDriverEconomy,economySettings} from "../economy/service.js";
+import {recordFuelExpense,recordFineExpense,calculateDriveScore,getDriverEconomy,economySettings} from "../economy/service.js";
 import {processDriverProgression} from "../progression/service.js";
+import {queueTrackedJobForApproval} from "../approvals/service.js";
 
 const hash=v=>crypto.createHash("sha256").update(String(v)).digest("hex");
 const safeJson=v=>JSON.parse(JSON.stringify(v,(k,x)=>typeof x==="bigint"?x.toString():x));
@@ -74,11 +75,7 @@ export async function ingestTrackerTelemetry(driverId,p){
 
   let economy=null,progression=null;
   if(eventType==="job-delivered"){
-    const miles=(num(data.distanceKm||data.jobDeliveredDistanceKm))*0.621371;
-    const income=num(data.revenue||data.jobDeliveredRevenue);
-    await db().execute("UPDATE drivers SET total_miles=total_miles+?,monthly_miles=monthly_miles+?,jobs_completed=jobs_completed+1,total_income=total_income+? WHERE id=?",[Math.max(0,miles),Math.max(0,miles),income,driverId]);
-    try{economy=await settleCompletedLoad(driverId,data,sessionId);}catch(e){console.error("[Economy Job]",e);}
-    try{progression=await processDriverProgression(driverId);}catch(e){console.error("[Progression]",e);}
+    try{economy=await queueTrackedJobForApproval(driverId,data,sessionId);}catch(e){console.error("[Job Approval Queue]",e);}
   }else if(["fine","job-cancelled","crash","collision"].includes(eventType)||crashDetected){try{progression=await processDriverProgression(driverId);}catch(e){console.error("[Progression]",e);}}
 
   let dispatch=null;try{dispatch=await syncDispatchFromTelemetry(driverId,eventType,data);}catch(e){console.error("[Dispatch Sync]",e);}
@@ -105,6 +102,6 @@ export async function handleDrivingStats(i){
     {name:"Fuel Stops",value:String(x.fuel_stops||0),inline:true},{name:"Crashes",value:String(x.crashes||0),inline:true},{name:"Crashes This Month",value:String(f[0]?.[0]?.incidents||0),inline:true},
     {name:"Max Speed",value:`${Number(x.max_speed_mph||0).toFixed(1)} mph`,inline:true},{name:"Tracked Jobs",value:String(x.jobs_tracked||0),inline:true},{name:"Driver Balance",value:money(econ.balance),inline:true},
     {name:"Load Pay Earned",value:money(econ.totalEarned),inline:true},{name:"Tracked Revenue",value:money(econ.income),inline:true},{name:"Tracked Expenses",value:money(econ.expenses),inline:true},{name:"Net Contribution",value:money(econ.net),inline:true},
-    {name:"Driver Pay Rate",value:`${Math.round(economySettings.driverPayRate*100)}% of completed load revenue`,inline:false}
-  ).setFooter({text:"Sterling Logistics Live Tracker • ranks and DriveScore update automatically"})]});
+    {name:"Driver Pay Rate",value:`${Math.round(economySettings.driverPayRate*100)}% of **approved** load revenue`,inline:false}
+  ).setFooter({text:"Sterling Logistics Live Tracker • completed loads require management approval before pay/stats are released"})]});
 }
