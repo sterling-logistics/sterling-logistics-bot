@@ -16,33 +16,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Restore Sterling app icon
+      - name: Create safe app icon
         shell: pwsh
         run: |
           Add-Type -AssemblyName System.Drawing
-          Add-Type -TypeDefinition @"
-          using System;
-          using System.Runtime.InteropServices;
-          public static class NativeMethods {
-            [DllImport("user32.dll", CharSet = CharSet.Auto)]
-            public extern static bool DestroyIcon(IntPtr handle);
-          }
-          "@
           $assetDir = '.\desktop\SterlingTracker.Desktop\Assets'
           New-Item -ItemType Directory -Force -Path $assetDir | Out-Null
-          $b64 = (Get-Content "$assetDir\SterlingTracker.ico.b64" -Raw).Trim()
-          $pngPath = "$assetDir\SterlingTracker.png"
-          $icoPath = "$assetDir\SterlingTracker.ico"
-          [IO.File]::WriteAllBytes($pngPath, [Convert]::FromBase64String($b64))
-          $bmp = New-Object System.Drawing.Bitmap($pngPath)
-          $hIcon = $bmp.GetHicon()
-          $icon = [System.Drawing.Icon]::FromHandle($hIcon)
+          $icoPath = Join-Path $assetDir 'SterlingTracker.ico'
           $fs = [IO.File]::Open($icoPath, [IO.FileMode]::Create)
-          $icon.Save($fs)
+          [System.Drawing.SystemIcons]::Application.Save($fs)
           $fs.Close()
-          $icon.Dispose()
-          $bmp.Dispose()
-          [NativeMethods]::DestroyIcon($hIcon) | Out-Null
 
       - name: Add pinned RenCloud shared-memory client
         shell: pwsh
@@ -56,39 +39,47 @@ jobs:
           Copy-Item (Join-Path $source 'Object') (Join-Path $dest 'Object') -Recurse -Force
           Copy-Item (Join-Path $temp 'LICENSE') (Join-Path $dest 'RENCloud-LICENSE.txt') -Force
 
-      - name: Prepare fixed Tracker 2.3.1 source
+      - name: Prepare Tracker 2.3.2 production source
         shell: pwsh
         run: |
           $xamlPath = '.\desktop\SterlingTracker.Desktop\MainWindow.xaml'
           $xaml = Get-Content $xamlPath -Raw
           $xaml = $xaml -replace '<Setter\s+Property="CharacterSpacing"\s+Value="[^"]*"\s*/>\s*', ''
           $xaml = $xaml -replace '\s+CharacterSpacing="[^"]*"', ''
-          $xaml = $xaml.Replace('v1.3.0', 'v2.3.1').Replace('v2.0.0', 'v2.3.1').Replace('v2.1.0','v2.3.1').Replace('v2.2.0','v2.3.1').Replace('v2.3.0','v2.3.1')
+          $xaml = $xaml.Replace('Sterling Tracker 2.0', 'Sterling Tracker 2.3.2').Replace('Sterling Tracker 2.1','Sterling Tracker 2.3.2').Replace('Sterling Tracker 2.2','Sterling Tracker 2.3.2').Replace('Sterling Tracker 2.3','Sterling Tracker 2.3.2')
+          $xaml = $xaml.Replace('v1.3.0','v2.3.2').Replace('v2.0.0','v2.3.2').Replace('v2.1.0','v2.3.2').Replace('v2.2.0','v2.3.2').Replace('v2.3.0','v2.3.2').Replace('v2.3.1','v2.3.2')
           Set-Content -Path $xamlPath -Value $xaml -Encoding utf8
 
           $codePath = '.\desktop\SterlingTracker.Desktop\MainWindow.xaml.cs'
           $code = Get-Content $codePath -Raw
-          $code = $code.Replace('DriverPayText', 'DriverShareText')
-          $code = $code.Replace('_ = LiveLoop();', '_ = DirectLiveLoop();')
-          $code = $code.Replace('Closed += (_, _) => running = false;', 'Closed += (_, _) => { running = false; directTelemetry.Dispose(); };')
           $code = $code.Replace('const string ApiBase = "http://45.43.163.175:8101";', 'const string ApiBase = "http://45.43.163.175:3000";')
-          if ($code -notmatch '45\.43\.163\.175:3000') { throw 'Tracker API endpoint patch was not applied' }
+          $code = $code.Replace('var src=StrAny(d,"JobValues.CitySource"),dst=StrAny(d,"JobValues.CityDestination");', 'var src=StrAny(d,"JobValues.CitySource");var dst=StrAny(d,"JobValues.CityDestination");')
+          if ($code -notmatch '45\.43\.163\.175:3000') { throw 'Live Sterling API endpoint was not applied.' }
           Set-Content -Path $codePath -Value $code -Encoding utf8
 
           $projectPath = '.\desktop\SterlingTracker.Desktop\SterlingTracker.Desktop.csproj'
           $project = Get-Content $projectPath -Raw
-          $project = $project.Replace('<Version>2.3.0</Version>', '<Version>2.3.1</Version>').Replace('<AssemblyVersion>2.3.0.0</AssemblyVersion>', '<AssemblyVersion>2.3.1.0</AssemblyVersion>').Replace('<FileVersion>2.3.0.0</FileVersion>', '<FileVersion>2.3.1.0</FileVersion>')
+          $project = $project.Replace('<TargetFramework>net10.0-windows</TargetFramework>', '<TargetFramework>net8.0-windows</TargetFramework>')
+          $project = $project.Replace('<Version>2.3.0</Version>', '<Version>2.3.2</Version>').Replace('<AssemblyVersion>2.3.0.0</AssemblyVersion>', '<AssemblyVersion>2.3.2.0</AssemblyVersion>').Replace('<FileVersion>2.3.0.0</FileVersion>', '<FileVersion>2.3.2.0</FileVersion>')
+          if ($project -notmatch 'System.Security.Cryptography.ProtectedData') {
+            $project = $project.Replace('</Project>', '  <ItemGroup>`n    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />`n  </ItemGroup>`n</Project>')
+          }
           Set-Content -Path $projectPath -Value $project -Encoding utf8
 
           $installerPath = '.\installer\SterlingTracker.iss'
           $installer = Get-Content $installerPath -Raw
-          $installer = $installer.Replace('#define MyAppVersion "2.3.0"', '#define MyAppVersion "2.3.1"').Replace('OutputBaseFilename=SterlingTracker-2.3.0-Setup', 'OutputBaseFilename=SterlingTracker-2.3.1-Setup')
+          $installer = $installer.Replace('#define MyAppVersion "2.3.0"', '#define MyAppVersion "2.3.2"')
+          $installer = $installer.Replace('OutputBaseFilename=SterlingTracker-2.3.0-Setup', 'OutputBaseFilename=SterlingTracker-2.3.2-Setup')
           Set-Content -Path $installerPath -Value $installer -Encoding utf8
 
-      - name: Setup .NET 10
+      - name: Setup .NET 8
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '8.0.x'
+
+      - name: Restore tracker
+        shell: pwsh
+        run: dotnet restore .\desktop\SterlingTracker.Desktop\SterlingTracker.Desktop.csproj -r win-x64
 
       - name: Publish self-contained Windows app
         shell: pwsh
@@ -97,11 +88,14 @@ jobs:
             -c Release `
             -r win-x64 `
             --self-contained true `
+            --no-restore `
             -p:PublishSingleFile=true `
             -p:EnableCompressionInSingleFile=true `
+            -p:PublishTrimmed=false `
             -p:DebugType=None `
             -p:DebugSymbols=false `
             -o .\publish\SterlingTracker
+          if (-not (Test-Path '.\publish\SterlingTracker\SterlingTracker.exe')) { throw 'SterlingTracker.exe was not produced.' }
 
       - name: Bundle ETS2 telemetry plugin
         shell: pwsh
@@ -115,7 +109,7 @@ jobs:
           Expand-Archive $pluginZip -DestinationPath $pluginExtract -Force
           $plugin = Get-ChildItem $pluginExtract -Filter 'scs-telemetry.dll' -Recurse | Where-Object { $_.FullName -match 'Win64|win_x64|x64' } | Select-Object -First 1
           if (-not $plugin) { $plugin = Get-ChildItem $pluginExtract -Filter 'scs-telemetry.dll' -Recurse | Select-Object -First 1 }
-          if (-not $plugin) { throw 'scs-telemetry.dll was not found in upstream package' }
+          if (-not $plugin) { throw 'scs-telemetry.dll was not found.' }
           Copy-Item $plugin.FullName (Join-Path $dest 'scs-telemetry.dll') -Force
 
       - name: Install Inno Setup
@@ -127,24 +121,24 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path .\dist | Out-Null
           & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' .\installer\SterlingTracker.iss
-          if (-not (Test-Path '.\dist\SterlingTracker-2.3.1-Setup.exe')) { throw 'Installer was not created' }
+          if (-not (Test-Path '.\dist\SterlingTracker-2.3.2-Setup.exe')) { throw 'Installer was not created.' }
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DOWNLOAD-Sterling-Tracker-2.3.1
-          path: dist/SterlingTracker-2.3.1-Setup.exe
+          name: DOWNLOAD-Sterling-Tracker-2.3.2
+          path: dist/SterlingTracker-2.3.2-Setup.exe
 
-      - name: Publish public Tracker 2.3.1 release
+      - name: Publish public Tracker 2.3.2 release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = 'tracker-v2.3.1'
-          $asset = '.\dist\SterlingTracker-2.3.1-Setup.exe'
+          $tag = 'tracker-v2.3.2'
+          $asset = '.\dist\SterlingTracker-2.3.2-Setup.exe'
           gh release view $tag 2>$null
           if ($LASTEXITCODE -eq 0) {
             gh release upload $tag $asset --clobber
           } else {
-            gh release create $tag $asset --target $env:GITHUB_SHA --title 'Sterling Tracker 2.3.1' --notes 'Fixed production build for Sterling Logistics. Uses the current live Sterling API endpoint on port 3000, direct ETS2 shared-memory telemetry, automatic job submission, job approval workflow, Discord sign-in, live stats and payout support.'
+            gh release create $tag $asset --target $env:GITHUB_SHA --title 'Sterling Tracker 2.3.2' --notes 'Production tracker build using the live Sterling API on port 3000, direct ETS2 shared-memory telemetry, Discord sign-in, automatic job submission, approval workflow, live stats and payout support.'
           }
