@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node src/index.js",
     "start:web": "node web-app.js",
-    "check": "find src -name '*.js' -print0 | xargs -0 -n1 node --check && node --check web-app.js"
+    "check": "find src -name '*.js' -print0 | xargs -0 -n1 node --check && node --check web-app.js",
+    "check:approval-flow": "node scripts/check-approval-flow.mjs"
   },
   "engines": {"node": ">=22"},
   "dependencies": {"discord.js":"14.27.0","dotenv":"17.2.3","mysql2":"3.15.3","express":"5.1.0"}
