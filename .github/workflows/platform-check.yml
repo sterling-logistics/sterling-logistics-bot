@@ -19,6 +19,8 @@ jobs:
         run: npm install --ignore-scripts
       - name: Check server JavaScript
         run: npm run check
+      - name: Check approval lifecycle
+        run: npm run check:approval-flow
       - name: Check website assets
         run: |
           test -f website/index.html
