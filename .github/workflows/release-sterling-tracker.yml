@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   build-windows:
@@ -25,6 +26,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Publish validation run ID
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $runUrl = "https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          $body = "Sterling Tracker 2.3.6 validation run started.`n`nRun ID: $env:GITHUB_RUN_ID`nCommit: $env:GITHUB_SHA`nRun: $runUrl"
+          gh issue edit 5 --title "Sterling Tracker 2.3.6 validation RUNNING - $env:GITHUB_RUN_ID" --body $body
+          if ($LASTEXITCODE -ne 0) { throw 'Could not publish validation run ID.' }
 
       - name: Setup .NET 8
         uses: actions/setup-dotnet@v4
@@ -151,3 +163,14 @@ jobs:
           path: dist/SterlingTracker-2.3.6-Setup.exe
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish validation result
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          $runUrl = "https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          $body = "Sterling Tracker 2.3.6 validation finished.`n`nStatus: $env:JOB_STATUS`nRun ID: $env:GITHUB_RUN_ID`nCommit: $env:GITHUB_SHA`nRun: $runUrl"
+          gh issue edit 5 --title "Sterling Tracker 2.3.6 validation $($env:JOB_STATUS.ToUpper()) - $env:GITHUB_RUN_ID" --body $body
