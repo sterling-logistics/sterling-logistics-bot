@@ -1,5 +1,6 @@
 import {db} from "../database/mysql.js";
 import {ensureEconomySchema} from "../economy/service.js";
+import {processDriverProgression} from "../progression/service.js";
 
 const num=v=>Number(v)||0;
 const payRate=()=>Math.max(0,Math.min(1,Number(process.env.DRIVER_PAY_RATE||0.35)));
@@ -64,6 +65,7 @@ export async function listPendingApprovals(){
 export async function reviewTrackedApproval(code,decision,reviewer,notes){
   await ensureApprovalSchema();
   const conn=await db().getConnection();
+  let result=null;
   try{
     await conn.beginTransaction();
     const[rows]=await conn.execute(`SELECT a.*,d.discord_id,d.sterling_driver_id FROM tracked_job_approvals a JOIN drivers d ON d.id=a.driver_id WHERE a.approval_code=? LIMIT 1 FOR UPDATE`,[String(code).toUpperCase()]);
@@ -76,11 +78,14 @@ export async function reviewTrackedApproval(code,decision,reviewer,notes){
       if(num(a.driver_payment)>0)await conn.execute("INSERT INTO economy_transactions(driver_id,type,amount,category,reference_key,details_json) VALUES(?,?,?,?,?,?)",[a.driver_id,"expense",a.driver_payment,"driver_payment",payKey,JSON.stringify({approvalId:a.id,rate:payRate()})]);
       await conn.execute(`INSERT INTO driver_wallets(driver_id,balance,total_earned,paid_jobs) VALUES(?,?,?,1)
         ON DUPLICATE KEY UPDATE balance=balance+VALUES(balance),total_earned=total_earned+VALUES(total_earned),paid_jobs=paid_jobs+1`,[a.driver_id,a.driver_payment,a.driver_payment]);
+      await conn.execute("UPDATE drivers SET total_miles=total_miles+?,monthly_miles=monthly_miles+?,jobs_completed=jobs_completed+1,total_income=total_income+? WHERE id=?",[a.distance_miles,a.distance_miles,a.revenue,a.driver_id]);
       await conn.execute("UPDATE tracked_job_approvals SET status='approved',reviewed_by=?,review_notes=?,reviewed_at=NOW() WHERE id=?",[reviewer,notes||null,a.id]);
     }else{
       await conn.execute("UPDATE tracked_job_approvals SET status='declined',reviewed_by=?,review_notes=?,reviewed_at=NOW() WHERE id=?",[reviewer,notes||null,a.id]);
     }
     await conn.commit();
-    return{...a,status:decision==="approve"?"approved":"declined"};
+    result={...a,status:decision==="approve"?"approved":"declined"};
   }catch(e){await conn.rollback();throw e;}finally{conn.release();}
+  if(decision==="approve"){try{result.progression=await processDriverProgression(result.driver_id);}catch(e){console.error("[Job Approval Progression]",e);}}
+  return result;
 }
