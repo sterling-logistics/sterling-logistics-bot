@@ -6,8 +6,6 @@ const STATUS_CHANNEL_NAME="driver-status";
 const EVENT_CHANNEL_NAME="tracker-events";
 const STAFF_ROLE_NAMES=["Founder","Executive Management","Senior Management"];
 const ALL_DRIVER_STATUS_EVENTS=new Set(["job-started","job-delivered","job-cancelled","fuel-stop","fine","rest-stop","crash","toll","ferry","train"]);
-// Every meaningful ETS2 tracker event is now mirrored automatically to tracker-events.
-// Heartbeats are intentionally excluded so Discord does not get spammed every second.
 const TRACKER_EVENTS_VISIBLE=new Set(ALL_DRIVER_STATUS_EVENTS);
 
 let trackerEventsChannelId=PREFERRED_TRACKER_EVENTS_CHANNEL_ID;
@@ -43,7 +41,7 @@ function buildActivityEmbed(driver,event,footer="Sterling Logistics Tracker"){
   const d=event.data||{};let title="🚛 Tracker Event",description=`**${who(driver)}** triggered a tracker event.`,fields=[];
   switch(event.type){
     case "job-started": title="🟢 Job Started";description=`**${who(driver)}** started an ETS2 job.`;fields=[{name:"Cargo",value:d.cargo||"Unknown",inline:true},{name:"Route",value:route(d),inline:false},{name:"Truck",value:d.truck||"Unknown",inline:true}];break;
-    case "job-delivered": title="✅ Job Completed";description=`**${who(driver)}** completed a delivery.`;fields=[{name:"Cargo",value:d.cargo||"Unknown",inline:true},{name:"Route",value:route(d),inline:false},{name:"Distance",value:`${f((Number(d.distanceKm)||0)*0.621371)} mi`,inline:true},{name:"Revenue",value:`€${Math.round(Number(d.revenue)||0).toLocaleString()}`,inline:true},{name:"Driver Share",value:`€${Math.round((Number(d.revenue)||0)*0.35).toLocaleString()}`,inline:true},{name:"Damage",value:`${f(Math.max(Number(d.truckDamage)||0,Number(d.trailerDamage)||0,Number(d.cargoDamage)||0)*100)}%`,inline:true}];break;
+    case "job-delivered": title="🟡 Delivery Completed • Awaiting Approval";description=`**${who(driver)}** completed a delivery. Management approval is required before pay and official stats are released.`;fields=[{name:"Cargo",value:d.cargo||"Unknown",inline:true},{name:"Route",value:route(d),inline:false},{name:"Distance",value:`${f((Number(d.distanceKm||d.jobDeliveredDistanceKm)||0)*0.621371)} mi`,inline:true},{name:"Revenue",value:`€${Math.round(Number(d.revenue||d.jobDeliveredRevenue)||0).toLocaleString()}`,inline:true},{name:"Projected Driver Pay",value:`€${Math.round((Number(d.revenue||d.jobDeliveredRevenue)||0)*Number(process.env.DRIVER_PAY_RATE||0.35)).toLocaleString()}`,inline:true},{name:"Damage",value:`${f(Math.max(Number(d.truckDamage)||0,Number(d.trailerDamage)||0,Number(d.cargoDamage)||0)*100)}%`,inline:true},{name:"Status",value:"Pending management verification",inline:false}];break;
     case "job-cancelled": title="🟠 Job Cancelled";description=`**${who(driver)}** cancelled an ETS2 job.`;fields=[{name:"Cargo",value:d.cargo||"Unknown",inline:true},{name:"Route",value:route(d),inline:false}];break;
     case "fuel-stop": title="⛽ Fuel Stop";description=`**${who(driver)}** refuelled.`;fields=[{name:"Fuel Added",value:`${f(event.fuelAdded)} L`,inline:true},{name:"Fuel Level",value:`${f(d.fuelLiters)} L`,inline:true},{name:"Truck",value:d.truck||"Unknown",inline:true}];break;
     case "fine": title="🚨 Fine Issued";description=`**${who(driver)}** received an in-game fine.`;fields=[{name:"Offence",value:d.fineOffence||"Unknown",inline:true},{name:"Amount",value:`€${Math.round(Number(d.fineAmount)||0).toLocaleString()}`,inline:true},{name:"Speed",value:`${f((Number(d.speedMps)||0)*2.2369362921)} mph`,inline:true}];break;
@@ -77,7 +75,6 @@ export async function postTrackerPresence(client,guildId,driver,event){
     const eventCh=trackerEventsChannelId?await guild.channels.fetch(trackerEventsChannelId).catch(()=>null):setup.events;
     const staffEmbed=buildPresenceEmbed(driver,event,"Sterling Logistics Staff Tracker");
     if(statusCh)await statusCh.send({embeds:[staffEmbed]});
-    // Presence is also mirrored to tracker-events so the full lifecycle is automatic in one feed.
     if(eventCh){const publicEmbed=buildPresenceEmbed(driver,event,"Sterling Logistics Tracker Events");await eventCh.send({embeds:[publicEmbed]});}
   }catch(err){console.error("[Tracker Presence]",err);}
 }
