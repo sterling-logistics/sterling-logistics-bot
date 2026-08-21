@@ -19,35 +19,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Start build monitor
-        id: monitor
+      - name: Mark tracker build started
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $body = @"
-Sterling Tracker 2.3.4 build started.
-
-Commit: $env:GITHUB_SHA
-Run: https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID
-
-This issue is updated automatically with the build result.
-"@
-          $url = gh issue create --title "Tracker Build Monitor 2.3.4 - $($env:GITHUB_RUN_ID)" --body $body
-          if ($LASTEXITCODE -ne 0) { throw 'Could not create build monitor issue.' }
-          $number = ($url.Trim().Split('/') | Select-Object -Last 1)
-          "issue_number=$number" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          $body = "# Sterling Tracker 2.3.5 BUILD STARTED`n`nCommit: $env:GITHUB_SHA`nRun: https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID`n`nGitHub Actions is building the Windows installer now."
+          gh issue edit 5 --title "Tracker Build RUNNING 2.3.5 - $($env:GITHUB_RUN_ID)" --body $body
+          if ($LASTEXITCODE -ne 0) { throw 'Could not update tracker build monitor issue.' }
 
       - name: Setup .NET 8
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
-      - name: Build and package Sterling Tracker 2.3.4
+      - name: Build and package Sterling Tracker 2.3.5
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          MONITOR_ISSUE: ${{ steps.monitor.outputs.issue_number }}
         run: |
           $ErrorActionPreference = 'Stop'
           $log = Join-Path $env:RUNNER_TEMP 'sterling-tracker-build.log'
@@ -92,23 +81,23 @@ This issue is updated automatically with the build result.
             $xaml = Get-Content $xamlPath -Raw
             $xaml = $xaml -replace '<Setter\s+Property="CharacterSpacing"\s+Value="[^"]*"\s*/>\s*', ''
             $xaml = $xaml -replace '\s+CharacterSpacing="[^"]*"', ''
-            $xaml = $xaml.Replace('Sterling Tracker 2.0', 'Sterling Tracker 2.3.4')
-            $xaml = $xaml.Replace('TRACKER 2.0', 'TRACKER 2.3.4')
-            $xaml = $xaml.Replace('v2.0.0', 'v2.3.4').Replace('v2.3.1', 'v2.3.4').Replace('v2.3.2', 'v2.3.4').Replace('v2.3.3', 'v2.3.4')
+            $xaml = $xaml.Replace('Sterling Tracker 2.0', 'Sterling Tracker 2.3.5')
+            $xaml = $xaml.Replace('TRACKER 2.0', 'TRACKER 2.3.5')
+            $xaml = $xaml.Replace('v2.0.0', 'v2.3.5').Replace('v2.3.1', 'v2.3.5').Replace('v2.3.2', 'v2.3.5').Replace('v2.3.3', 'v2.3.5').Replace('v2.3.4', 'v2.3.5')
             Set-Content -Path $xamlPath -Value $xaml -Encoding utf8
 
             $projectPath = '.\desktop\SterlingTracker.Desktop\SterlingTracker.Desktop.csproj'
             $project = Get-Content $projectPath -Raw
             $project = $project.Replace('net10.0-windows', 'net8.0-windows')
-            $project = $project.Replace('<Version>2.3.2</Version>', '<Version>2.3.4</Version>').Replace('<Version>2.3.3</Version>', '<Version>2.3.4</Version>')
-            $project = $project.Replace('<AssemblyVersion>2.3.2.0</AssemblyVersion>', '<AssemblyVersion>2.3.4.0</AssemblyVersion>').Replace('<AssemblyVersion>2.3.3.0</AssemblyVersion>', '<AssemblyVersion>2.3.4.0</AssemblyVersion>')
-            $project = $project.Replace('<FileVersion>2.3.2.0</FileVersion>', '<FileVersion>2.3.4.0</FileVersion>').Replace('<FileVersion>2.3.3.0</FileVersion>', '<FileVersion>2.3.4.0</FileVersion>')
+            $project = $project.Replace('<Version>2.3.2</Version>', '<Version>2.3.5</Version>').Replace('<Version>2.3.3</Version>', '<Version>2.3.5</Version>').Replace('<Version>2.3.4</Version>', '<Version>2.3.5</Version>')
+            $project = $project.Replace('<AssemblyVersion>2.3.2.0</AssemblyVersion>', '<AssemblyVersion>2.3.5.0</AssemblyVersion>').Replace('<AssemblyVersion>2.3.3.0</AssemblyVersion>', '<AssemblyVersion>2.3.5.0</AssemblyVersion>').Replace('<AssemblyVersion>2.3.4.0</AssemblyVersion>', '<AssemblyVersion>2.3.5.0</AssemblyVersion>')
+            $project = $project.Replace('<FileVersion>2.3.2.0</FileVersion>', '<FileVersion>2.3.5.0</FileVersion>').Replace('<FileVersion>2.3.3.0</FileVersion>', '<FileVersion>2.3.5.0</FileVersion>').Replace('<FileVersion>2.3.4.0</FileVersion>', '<FileVersion>2.3.5.0</FileVersion>')
             [xml]$null = $project
             Set-Content -Path $projectPath -Value $project -Encoding utf8
 
             $installerPath = '.\installer\SterlingTracker.iss'
             $installer = Get-Content $installerPath -Raw
-            $installer = $installer.Replace('2.3.2', '2.3.4').Replace('2.3.3', '2.3.4')
+            $installer = $installer.Replace('2.3.2', '2.3.5').Replace('2.3.3', '2.3.5').Replace('2.3.4', '2.3.5')
             Set-Content -Path $installerPath -Value $installer -Encoding utf8
 
             Run-Native 'Restore .NET dependencies' { dotnet restore $projectPath -r win-x64 }
@@ -134,8 +123,8 @@ This issue is updated automatically with the build result.
 
             New-Item -ItemType Directory -Force -Path '.\dist' | Out-Null
             Run-Native 'Build Sterling installer' { & $iscc $installerPath }
-            $installerExe = '.\dist\SterlingTracker-2.3.4-Setup.exe'
-            if (-not (Test-Path $installerExe)) { throw 'SterlingTracker-2.3.4-Setup.exe was not created.' }
+            $installerExe = '.\dist\SterlingTracker-2.3.5-Setup.exe'
+            if (-not (Test-Path $installerExe)) { throw 'SterlingTracker-2.3.5-Setup.exe was not created.' }
             if ((Get-Item $installerExe).Length -lt 1000000) { throw 'Installer output is unexpectedly small.' }
           }
           catch {
@@ -144,7 +133,7 @@ This issue is updated automatically with the build result.
             if ($tail.Length -gt 50000) { $tail = $tail.Substring($tail.Length - 50000) }
             $bodyPath = Join-Path $env:RUNNER_TEMP 'tracker-build-failure.md'
             @"
-# Sterling Tracker 2.3.4 BUILD FAILED
+# Sterling Tracker 2.3.5 BUILD FAILED
 
 Commit: $env:GITHUB_SHA  
 Run: https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID
@@ -157,7 +146,7 @@ Error: $message
 $tail
 ````
 "@ | Set-Content $bodyPath -Encoding utf8
-            try { gh issue edit $env:MONITOR_ISSUE --title "Tracker Build FAILED 2.3.4 - $($env:GITHUB_RUN_ID)" --body-file $bodyPath } catch { }
+            try { gh issue edit 5 --title "Tracker Build FAILED 2.3.5 - $($env:GITHUB_RUN_ID)" --body-file $bodyPath } catch { }
             Write-Error "Sterling Tracker build failed: $message"
             exit 1
           }
@@ -165,35 +154,34 @@ $tail
       - name: Upload Sterling Tracker installer
         uses: actions/upload-artifact@v4
         with:
-          name: DOWNLOAD-Sterling-Tracker-2.3.4
-          path: dist/SterlingTracker-2.3.4-Setup.exe
+          name: DOWNLOAD-Sterling-Tracker-2.3.5
+          path: dist/SterlingTracker-2.3.5-Setup.exe
           if-no-files-found: error
 
-      - name: Publish Sterling Tracker 2.3.4 release
+      - name: Publish Sterling Tracker 2.3.5 release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          MONITOR_ISSUE: ${{ steps.monitor.outputs.issue_number }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $tag = 'tracker-v2.3.4'
-          $asset = '.\dist\SterlingTracker-2.3.4-Setup.exe'
+          $tag = 'tracker-v2.3.5'
+          $asset = '.\dist\SterlingTracker-2.3.5-Setup.exe'
           try {
             gh release view $tag 2>$null
             if ($LASTEXITCODE -eq 0) {
               gh release upload $tag $asset --clobber
               if ($LASTEXITCODE -ne 0) { throw 'Could not upload installer to existing release.' }
             } else {
-              gh release create $tag $asset --target $env:GITHUB_SHA --title 'Sterling Tracker 2.3.4' --notes 'Sterling Logistics production tracker with direct ETS2 shared-memory telemetry, telemetry plugin installation, Discord sign-in, live statistics, job submission, server job history and staff approval workflow.'
+              gh release create $tag $asset --target $env:GITHUB_SHA --title 'Sterling Tracker 2.3.5' --notes 'Sterling Logistics production tracker with direct ETS2 shared-memory telemetry, telemetry plugin installation, Discord sign-in, live statistics, job submission, server job history and staff approval workflow.'
               if ($LASTEXITCODE -ne 0) { throw 'Could not create GitHub release.' }
             }
-            $download = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$tag/SterlingTracker-2.3.4-Setup.exe"
-            $body = "# Sterling Tracker 2.3.4 BUILD SUCCESS`n`nCommit: $env:GITHUB_SHA`n`nDownload: $download`n`nThe Windows installer, ETS2 telemetry plugin and public GitHub release were all created successfully."
-            gh issue edit $env:MONITOR_ISSUE --title "Tracker Build SUCCESS 2.3.4 - $($env:GITHUB_RUN_ID)" --body $body
-            gh issue close $env:MONITOR_ISSUE --reason completed
+            $download = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$tag/SterlingTracker-2.3.5-Setup.exe"
+            $body = "# Sterling Tracker 2.3.5 BUILD SUCCESS`n`nCommit: $env:GITHUB_SHA`n`nDownload: $download`n`nThe Windows installer, ETS2 telemetry plugin and public GitHub release were created successfully."
+            gh issue edit 5 --title "Tracker Build SUCCESS 2.3.5 - $($env:GITHUB_RUN_ID)" --body $body
+            gh issue close 5 --reason completed
           }
           catch {
-            $body = "# Sterling Tracker 2.3.4 RELEASE FAILED`n`nCommit: $env:GITHUB_SHA`nRun: https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID`n`nError: $($_.Exception.Message)"
-            try { gh issue edit $env:MONITOR_ISSUE --title "Tracker Release FAILED 2.3.4 - $($env:GITHUB_RUN_ID)" --body $body } catch { }
+            $body = "# Sterling Tracker 2.3.5 RELEASE FAILED`n`nCommit: $env:GITHUB_SHA`nRun: https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID`n`nError: $($_.Exception.Message)"
+            try { gh issue edit 5 --title "Tracker Release FAILED 2.3.5 - $($env:GITHUB_RUN_ID)" --body $body } catch { }
             throw
           }
