@@ -55,14 +55,14 @@ jobs:
           Copy-Item (Join-Path $source 'Object') (Join-Path $dest 'Object') -Recurse -Force
           Copy-Item (Join-Path $temp 'LICENSE') (Join-Path $dest 'RENCloud-LICENSE.txt') -Force
 
-      - name: Enforce Tracker 2.3 direct telemetry release
+      - name: Enforce Tracker 2.3.1 live release
         shell: pwsh
         run: |
           $xamlPath = '.\desktop\SterlingTracker.Desktop\MainWindow.xaml'
           $xaml = Get-Content $xamlPath -Raw
           $xaml = $xaml -replace '<Setter\s+Property="CharacterSpacing"\s+Value="[^"]*"\s*/>\s*', ''
           $xaml = $xaml -replace '\s+CharacterSpacing="[^"]*"', ''
-          $xaml = $xaml.Replace('v1.3.0', 'v2.3.0').Replace('v2.0.0', 'v2.3.0').Replace('v2.1.0','v2.3.0').Replace('v2.2.0','v2.3.0')
+          $xaml = $xaml.Replace('v1.3.0', 'v2.3.1').Replace('v2.0.0', 'v2.3.1').Replace('v2.1.0','v2.3.1').Replace('v2.2.0','v2.3.1').Replace('v2.3.0','v2.3.1')
           $xaml = $xaml.Replace('Sterling Tracker 2.0', 'Sterling Tracker 2.3').Replace('Sterling Tracker 2.1','Sterling Tracker 2.3').Replace('Sterling Tracker 2.2','Sterling Tracker 2.3').Replace('TRACKER 2.0', 'TRACKER 2.3').Replace('TRACKER 2.1','TRACKER 2.3').Replace('TRACKER 2.2','TRACKER 2.3')
           Set-Content -Path $xamlPath -Value $xaml -Encoding utf8
 
@@ -71,7 +71,19 @@ jobs:
           $code = $code.Replace('DriverPayText', 'DriverShareText')
           $code = $code.Replace('_ = LiveLoop();', '_ = DirectLiveLoop();')
           $code = $code.Replace('Closed += (_, _) => running = false;', 'Closed += (_, _) => { running = false; directTelemetry.Dispose(); };')
+          $code = $code.Replace('const string ApiBase = "http://45.43.163.175:8101";', 'const string ApiBase = "http://45.43.163.175:3000";')
+          if ($code -notmatch '45\.43\.163\.175:3000') { throw 'Tracker API endpoint patch was not applied' }
           Set-Content -Path $codePath -Value $code -Encoding utf8
+
+          $projectPath = '.\desktop\SterlingTracker.Desktop\SterlingTracker.Desktop.csproj'
+          $project = Get-Content $projectPath -Raw
+          $project = $project.Replace('<Version>2.3.0</Version>', '<Version>2.3.1</Version>').Replace('<AssemblyVersion>2.3.0.0</AssemblyVersion>', '<AssemblyVersion>2.3.1.0</AssemblyVersion>').Replace('<FileVersion>2.3.0.0</FileVersion>', '<FileVersion>2.3.1.0</FileVersion>')
+          Set-Content -Path $projectPath -Value $project -Encoding utf8
+
+          $installerPath = '.\installer\SterlingTracker.iss'
+          $installer = Get-Content $installerPath -Raw
+          $installer = $installer.Replace('#define MyAppVersion "2.3.0"', '#define MyAppVersion "2.3.1"').Replace('OutputBaseFilename=SterlingTracker-2.3.0-Setup', 'OutputBaseFilename=SterlingTracker-2.3.1-Setup')
+          Set-Content -Path $installerPath -Value $installer -Encoding utf8
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -115,16 +127,16 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path .\dist | Out-Null
           & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' .\installer\SterlingTracker.iss
-          if (-not (Test-Path '.\dist\SterlingTracker-2.3.0-Setup.exe')) { throw 'Installer was not created' }
+          if (-not (Test-Path '.\dist\SterlingTracker-2.3.1-Setup.exe')) { throw 'Installer was not created' }
 
       - name: Upload driver installer
         uses: actions/upload-artifact@v4
         with:
-          name: DOWNLOAD-Sterling-Tracker-2.3.0
-          path: dist/SterlingTracker-2.3.0-Setup.exe
+          name: DOWNLOAD-Sterling-Tracker-2.3.1
+          path: dist/SterlingTracker-2.3.1-Setup.exe
 
       - name: Upload developer portable build
         uses: actions/upload-artifact@v4
         with:
-          name: DEV-ONLY-SterlingTracker-2.3.0-Portable
+          name: DEV-ONLY-SterlingTracker-2.3.1-Portable
           path: publish/SterlingTracker/**
