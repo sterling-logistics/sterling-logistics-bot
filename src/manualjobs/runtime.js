@@ -107,7 +107,7 @@ async function pendingJobs(i){
     FROM jobs j JOIN drivers d ON d.id=j.driver_id
     WHERE j.submission_source='manual' AND j.status='pending_review'
     ORDER BY j.manual_submitted_at ASC,j.id ASC LIMIT 25`);
-  const text=rows.length?rows.map(x=>`**${x.job_code}** • <@${x.discord_id}> (${x.sterling_driver_id||"No ID"})\n${x.origin_city} → ${x.destination_city} • **${Number(x.distance_miles||0).toFixed(1)} mi** • ${x.cargo}${x.proof_url?" • [proof]":""}`).join("\n\n"):"✅ There are no manual jobs waiting for review.";
+  const text=rows.length?rows.map(x=>`**${x.job_code}** • <@${x.discord_id}> (${x.sterling_driver_id||"No ID"})\n${x.origin_city} → ${x.destination_city} • **${Number(x.distance_miles||0).toFixed(1)} mi** • ${x.cargo}${x.proof_url?` • [proof](${x.proof_url})`:""}`).join("\n\n"):"✅ There are no manual jobs waiting for review.";
   return i.reply({embeds:[new EmbedBuilder().setTitle("Pending Manual Jobs").setDescription(text.slice(0,3900)).setFooter({text:`${rows.length} submission${rows.length===1?"":"s"} shown`})],flags:MessageFlags.Ephemeral});
 }
 
@@ -162,7 +162,11 @@ if(!Client.prototype.__sterlingManualJobsPatched){
     if(!this.__sterlingManualJobsRuntime){
       Object.defineProperty(this,"__sterlingManualJobsRuntime",{value:true,configurable:false});
       this.on(Events.InteractionCreate,async i=>{try{await handleInteraction(i);}catch(e){console.error("[Manual Jobs] interaction",e);try{if(!i.replied&&!i.deferred)await i.reply({content:"Sterling could not process that manual job request.",flags:MessageFlags.Ephemeral});}catch{}}});
-      this.once(Events.ClientReady,()=>{setTimeout(()=>registerCommands().catch(e=>console.error("[Manual Jobs] registration",e)),7000);});
+      this.once(Events.ClientReady,()=>{
+        const run=()=>registerCommands().catch(e=>console.error("[Manual Jobs] registration",e));
+        setTimeout(run,7000);
+        setTimeout(run,25000);
+      });
     }
     return originalLogin.apply(this,args);
   };
