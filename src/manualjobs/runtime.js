@@ -1,6 +1,7 @@
 import {Client,Events,EmbedBuilder,MessageFlags,PermissionFlagsBits,REST,Routes,SlashCommandBuilder} from "discord.js";
 import {loadConfig} from "../config.js";
 import {db} from "../database/mysql.js";
+import {settleCompletedLoad} from "../economy/service.js";
 
 const admin=PermissionFlagsBits.Administrator;
 let schemaReady=false;
@@ -90,7 +91,7 @@ async function submitManualJob(i){
   await db().execute("UPDATE jobs SET job_code=? WHERE id=?",[code,r.insertId]);
   await audit(i.user.id,"job.manual.submit",i.user.id,`${code} | ${origin} -> ${destination} | ${miles} mi | ${cargo}`);
 
-  const embed=new EmbedBuilder().setTitle(`Manual Job Submitted | ${code}`).setDescription("Your job has been saved and is **pending staff approval**. It will not count toward your official Sterling statistics until approved.").addFields(
+  const embed=new EmbedBuilder().setTitle(`Manual Job Submitted | ${code}`).setDescription("Your job has been saved and is **pending staff approval**. It will not count toward your official Sterling statistics and **no wallet balance will be credited** until staff approve it.").addFields(
     {name:"Route",value:`${origin} → ${destination}`},
     {name:"Cargo",value:cargo,inline:true},
     {name:"Distance",value:`${Number(miles).toFixed(1)} mi`,inline:true},
@@ -132,14 +133,26 @@ async function reviewJob(i){
       await conn.execute("UPDATE jobs SET status='rejected',reviewed_by=?,reviewed_at=NOW(),review_notes=? WHERE id=?",[i.user.id,notes||"Rejected by staff",j.id]);
     }
     await conn.commit();
-    await audit(i.user.id,`job.manual.${decision}`,j.discord_id,`${code} | ${j.origin_city} -> ${j.destination_city} | ${Number(j.distance_miles||0)} mi${notes?` | ${notes}`:""}`);
+
+    let settlement={credited:false,payment:0,revenue:Number(j.income||0)};
+    if(decision==="approve"){
+      settlement=await settleCompletedLoad(j.driver_id,{
+        revenue:Number(j.income||0),
+        sourceCity:j.origin_city,
+        destinationCity:j.destination_city,
+        cargo:j.cargo
+      },`manual:${j.id}`);
+    }
+
+    await audit(i.user.id,`job.manual.${decision}`,j.discord_id,`${code} | ${j.origin_city} -> ${j.destination_city} | ${Number(j.distance_miles||0)} mi${decision==="approve"?` | wallet credit ${money(settlement.payment||0)}`:""}${notes?` | ${notes}`:""}`);
 
     const approved=decision==="approve";
     return i.reply({embeds:[new EmbedBuilder().setTitle(`${approved?"✅ Approved":"❌ Rejected"} | ${code}`).setDescription(`<@${j.discord_id}> • ${j.sterling_driver_id||"Sterling driver"}`).addFields(
       {name:"Route",value:`${j.origin_city||"?"} → ${j.destination_city||"?"}`},
       {name:"Cargo",value:j.cargo||"Unknown",inline:true},
       {name:"Distance",value:`${Number(j.distance_miles||0).toFixed(1)} mi`,inline:true},
-      {name:"Decision",value:approved?"Counts toward official driver statistics":"Does not count toward driver statistics"},
+      {name:"Decision",value:approved?"Approved and added to official driver statistics":"Rejected and excluded from driver statistics"},
+      {name:"Driver Wallet",value:approved?(Number(j.income||0)>0?(settlement.credited?`Credited **${money(settlement.payment)}** after approval.`:"No duplicate credit was made."):"No income was supplied, so no balance was credited."):"No balance credited."},
       {name:"Review Notes",value:notes||"None"}
     )]});
   }catch(e){
