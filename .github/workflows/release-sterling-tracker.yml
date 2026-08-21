@@ -1,4 +1,5 @@
 name: Build Sterling Tracker
+# Pull requests run the same Windows build so CI status and artifacts are verifiable before merge.
 
 on:
   workflow_dispatch:
