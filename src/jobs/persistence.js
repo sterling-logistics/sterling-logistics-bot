@@ -35,23 +35,23 @@ export async function persistTrackerJobEvent(driverId,body){
     const jobCode=startCode(driverId,sessionCode,data);
     await db().execute(`INSERT INTO jobs(job_code,driver_id,truck_model,cargo,origin_city,destination_city,status,started_at)
       VALUES(?,?,?,?,?,?,'in_progress',NOW())
-      ON DUPLICATE KEY UPDATE truck_model=COALESCE(VALUES(truck_model),truck_model),cargo=COALESCE(VALUES(cargo),cargo),origin_city=COALESCE(VALUES(origin_city),origin_city),destination_city=COALESCE(VALUES(destination_city),destination_city),status=IF(status='completed',status,'in_progress'),started_at=COALESCE(started_at,NOW())`,
+      ON DUPLICATE KEY UPDATE truck_model=COALESCE(VALUES(truck_model),truck_model),cargo=COALESCE(VALUES(cargo),cargo),origin_city=COALESCE(VALUES(origin_city),origin_city),destination_city=COALESCE(VALUES(destination_city),destination_city),status=IF(status IN ('completed','rejected'),status,'in_progress'),started_at=COALESCE(started_at,NOW())`,
       [jobCode,driverId,truck,cargo,origin,destination]);
     return{jobCode,status:"in_progress"};
   }
 
   const current=await activeJob(driverId);
-  const status=eventType==="job-delivered"?"completed":"cancelled";
+  const status=eventType==="job-delivered"?"pending_review":"cancelled";
   if(current){
-    await db().execute(`UPDATE jobs SET truck_model=COALESCE(?,truck_model),cargo=COALESCE(?,cargo),origin_city=COALESCE(?,origin_city),destination_city=COALESCE(?,destination_city),distance_miles=IF(?>0,?,distance_miles),income=IF(?>0,?,income),truck_damage=?,trailer_damage=?,cargo_damage=?,status=?,completed_at=IF(?='completed',NOW(),completed_at) WHERE id=?`,
+    await db().execute(`UPDATE jobs SET truck_model=COALESCE(?,truck_model),cargo=COALESCE(?,cargo),origin_city=COALESCE(?,origin_city),destination_city=COALESCE(?,destination_city),distance_miles=IF(?>0,?,distance_miles),income=IF(?>0,?,income),truck_damage=?,trailer_damage=?,cargo_damage=?,status=?,completed_at=IF(?='pending_review',NOW(),completed_at) WHERE id=?`,
       [truck,cargo,origin,destination,miles,miles,revenue,revenue,truckDamage,trailerDamage,cargoDamage,status,status,current.id]);
     return{jobCode:current.job_code,status,updated:true};
   }
 
   const fallbackCode=startCode(driverId,sessionCode,data);
   await db().execute(`INSERT INTO jobs(job_code,driver_id,truck_model,cargo,origin_city,destination_city,distance_miles,income,truck_damage,trailer_damage,cargo_damage,status,started_at,completed_at)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,NOW(),IF(?='completed',NOW(),NULL))
-    ON DUPLICATE KEY UPDATE distance_miles=IF(VALUES(distance_miles)>0,VALUES(distance_miles),distance_miles),income=IF(VALUES(income)>0,VALUES(income),income),truck_damage=VALUES(truck_damage),trailer_damage=VALUES(trailer_damage),cargo_damage=VALUES(cargo_damage),status=VALUES(status),completed_at=IF(VALUES(status)='completed',NOW(),completed_at)`,
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,NOW(),IF(?='pending_review',NOW(),NULL))
+    ON DUPLICATE KEY UPDATE distance_miles=IF(VALUES(distance_miles)>0,VALUES(distance_miles),distance_miles),income=IF(VALUES(income)>0,VALUES(income),income),truck_damage=VALUES(truck_damage),trailer_damage=VALUES(trailer_damage),cargo_damage=VALUES(cargo_damage),status=IF(status IN ('completed','rejected'),status,VALUES(status)),completed_at=IF(VALUES(status)='pending_review',COALESCE(completed_at,NOW()),completed_at)`,
     [fallbackCode,driverId,truck,cargo,origin,destination,miles,revenue,truckDamage,trailerDamage,cargoDamage,status,status]);
   return{jobCode:fallbackCode,status,fallback:true};
 }
