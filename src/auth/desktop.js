@@ -9,8 +9,10 @@ function cleanup(){const now=Date.now();for(const[k,v]of pending)if(now-v.create
 setInterval(cleanup,60_000).unref?.();
 
 async function createDesktopSession(driverId,deviceName){
+  const device=String(deviceName||"Sterling Tracker").slice(0,120);
+  await db().execute("UPDATE desktop_sessions SET revoked_at=NOW() WHERE driver_id=? AND device_name=? AND revoked_at IS NULL",[driverId,device]);
   const token=`sldsk_${crypto.randomBytes(32).toString("hex")}`;
-  await db().execute("INSERT INTO desktop_sessions(driver_id,token_hash,device_name,created_at,last_used_at,expires_at,revoked_at) VALUES(?,?,?,NOW(),NULL,DATE_ADD(NOW(),INTERVAL 90 DAY),NULL)",[driverId,hash(token),String(deviceName||"Sterling Tracker").slice(0,120)]);
+  await db().execute("INSERT INTO desktop_sessions(driver_id,token_hash,device_name,created_at,last_used_at,expires_at,revoked_at) VALUES(?,?,?,NOW(),NULL,DATE_ADD(NOW(),INTERVAL 90 DAY),NULL)",[driverId,hash(token),device]);
   return token;
 }
 
@@ -18,7 +20,7 @@ export async function authenticateDesktopSession(token){
   if(!token)return null;
   const[r]=await db().execute(`SELECT ds.id session_id,ds.driver_id,d.sterling_driver_id,d.discord_id,d.discord_username,d.rank_name,d.total_miles,d.jobs_completed
     FROM desktop_sessions ds JOIN drivers d ON d.id=ds.driver_id
-    WHERE ds.token_hash=? AND ds.revoked_at IS NULL AND ds.expires_at>NOW() AND d.status<>'left' LIMIT 1`,[hash(token)]);
+    WHERE ds.token_hash=? AND ds.revoked_at IS NULL AND ds.expires_at>NOW() AND d.status='active' LIMIT 1`,[hash(token)]);
   if(!r[0])return null;
   await db().execute("UPDATE desktop_sessions SET last_used_at=NOW() WHERE id=?",[r[0].session_id]);
   return r[0];
@@ -57,8 +59,8 @@ export function registerDesktopAuthRoutes(app,c){
       const userRes=await fetch("https://discord.com/api/v10/users/@me",{headers:{Authorization:`Bearer ${oauth.access_token}`}});
       if(!userRes.ok)throw new Error(`Discord identity lookup failed (${userRes.status})`);
       const user=await userRes.json();
-      const[rows]=await db().execute("SELECT id,sterling_driver_id,discord_id,discord_username,rank_name,total_miles,jobs_completed FROM drivers WHERE discord_id=? AND status<>'left' LIMIT 1",[String(user.id)]);
-      const driver=rows[0];if(!driver)throw new Error("Your Discord account does not have an active Sterling driver profile");
+      const[rows]=await db().execute("SELECT id,sterling_driver_id,discord_id,discord_username,rank_name,total_miles,jobs_completed FROM drivers WHERE discord_id=? AND status='active' LIMIT 1",[String(user.id)]);
+      const driver=rows[0];if(!driver)throw new Error("Your Discord account is not currently approved for Sterling Tracker access");
       await db().execute("UPDATE drivers SET discord_username=? WHERE id=?",[String(user.global_name||user.username||driver.discord_username||"").slice(0,100),driver.id]);
       const token=await createDesktopSession(driver.id,p.deviceName);
       p.status="complete";p.token=token;p.driver={sterlingDriverId:driver.sterling_driver_id,discordUsername:user.global_name||user.username,rank:driver.rank_name,totalMiles:Number(driver.total_miles||0),jobsCompleted:Number(driver.jobs_completed||0)};
