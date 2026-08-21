@@ -1,6 +1,7 @@
 import {Client,Events} from "discord.js";
 import {loadConfig} from "../config.js";
 import {handleManagementInteraction,registerManagementCommands} from "./module.js";
+import {handleAnalyticsInteraction,registerAnalyticsCommands} from "./analytics.js";
 
 const originalLogin=Client.prototype.login;
 
@@ -10,14 +11,18 @@ if(!Client.prototype.__sterlingManagementPatched){
     if(!this.__sterlingManagementRuntime){
       Object.defineProperty(this,"__sterlingManagementRuntime",{value:true,configurable:false});
       this.on(Events.InteractionCreate,async interaction=>{
-        try{await handleManagementInteraction(interaction);}catch(e){console.error("[Management Runtime] interaction",e);}
+        try{
+          if(await handleManagementInteraction(interaction))return;
+          await handleAnalyticsInteraction(interaction);
+        }catch(e){console.error("[Management Runtime] interaction",e);}
       });
       this.once(Events.ClientReady,()=>{
         const register=async()=>{
           try{
             const c=loadConfig();
             await registerManagementCommands(c);
-            console.log("[Management] VTC management commands registered");
+            await registerAnalyticsCommands(c);
+            console.log("[Management] VTC management + analytics commands registered");
           }catch(e){console.error("[Management] registration failed",e);}
         };
         setTimeout(register,5000);
