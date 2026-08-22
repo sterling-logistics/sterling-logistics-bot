@@ -28,13 +28,18 @@ export async function authenticateDesktopSession(token){
 
 export function registerDesktopAuthRoutes(app,c){
   app.post("/auth/desktop/start",(q,r)=>{
-    if(!c.discordClientSecret||!c.publicBaseUrl)return r.status(503).json({ok:false,error:"Discord desktop login is not configured"});
+    if(!c.discordClientSecret)return r.status(503).json({ok:false,error:"Discord desktop login is not configured"});
     const state=crypto.randomBytes(32).toString("hex");
     const deviceName=String(q.body?.deviceName||"Sterling Tracker").slice(0,120);
-    pending.set(state,{createdAt:Date.now(),status:"pending",deviceName});
-    const redirectUri=`${c.publicBaseUrl}/auth/discord/callback`;
+    const forwardedProto=String(q.get("x-forwarded-proto")||"").split(",")[0].trim();
+    const protocol=forwardedProto||q.protocol||"http";
+    const host=String(q.get("host")||"").trim();
+    if(!host)return r.status(400).json({ok:false,error:"Could not determine tracker API host"});
+    const redirectUri=`${protocol}://${host}/auth/discord/callback`;
+    pending.set(state,{createdAt:Date.now(),status:"pending",deviceName,redirectUri});
     const u=new URL("https://discord.com/oauth2/authorize");
     u.searchParams.set("client_id",c.applicationId);u.searchParams.set("response_type","code");u.searchParams.set("redirect_uri",redirectUri);u.searchParams.set("scope","identify");u.searchParams.set("state",state);
+    console.log("[Desktop OAuth Start]",{redirectUri});
     r.json({ok:true,state,authorizeUrl:u.toString(),expiresIn:600});
   });
 
@@ -51,7 +56,7 @@ export function registerDesktopAuthRoutes(app,c){
     if(!p||Date.now()-p.createdAt>10*60*1000)return r.status(400).send("Sterling Tracker login request expired. Return to the tracker and try again.");
     try{
       if(!code)throw new Error("Discord did not return an authorization code");
-      const redirectUri=`${c.publicBaseUrl}/auth/discord/callback`;
+      const redirectUri=p.redirectUri;
       const form=new URLSearchParams({grant_type:"authorization_code",code,redirect_uri:redirectUri});
       const basic=Buffer.from(`${c.applicationId}:${c.discordClientSecret}`,"utf8").toString("base64");
       const tokenRes=await fetch("https://discord.com/api/v10/oauth2/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Authorization":`Basic ${basic}`},body:form});
