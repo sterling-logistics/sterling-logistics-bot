@@ -15,6 +15,16 @@ try {
   Get-ChildItem $source -Filter '*.cs' | Copy-Item -Destination $dest -Force
   Copy-Item (Join-Path $source 'Object') (Join-Path $dest 'Object') -Recurse -Force
   Copy-Item (Join-Path $temp 'LICENSE') (Join-Path $dest 'RENCloud-LICENSE.txt') -Force
+
+  # WinForms implicit usings introduce System.Windows.Forms.Timer. The pinned client
+  # intends System.Threading.Timer, so make that explicit without changing behavior.
+  $telemetryFile = Join-Path $dest 'SCSSdkTelemetry.cs'
+  $telemetryCode = Get-Content $telemetryFile -Raw
+  if ($telemetryCode -notmatch 'using Timer = System\.Threading\.Timer;') {
+    $telemetryCode = $telemetryCode -replace 'using System\.Threading;','using System.Threading;`r`nusing Timer = System.Threading.Timer;'
+    Set-Content -Path $telemetryFile -Value $telemetryCode -Encoding utf8
+  }
+
   Write-Host "RenCloud V.1.12.1 telemetry client prepared at $dest"
 }
 finally {
