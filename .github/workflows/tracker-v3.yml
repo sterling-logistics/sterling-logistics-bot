@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   windows:
@@ -21,6 +22,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Publish build run ID
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $url="https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          gh issue edit 8 --title "Sterling Tracker 3.0 build RUNNING - $env:GITHUB_RUN_ID" --body "Tracker 3.0 clean build started.`n`nRun ID: $env:GITHUB_RUN_ID`nCommit: $env:GITHUB_SHA`nRun: $url"
+          if($LASTEXITCODE -ne 0){throw 'Could not publish build monitor status'}
 
       - name: Setup .NET 8
         uses: actions/setup-dotnet@v4
@@ -90,3 +101,13 @@ jobs:
           path: tracker-v3/dist/SterlingTracker-3.0.0-Setup.exe
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish build result
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          $url="https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          gh issue edit 8 --title "Sterling Tracker 3.0 build $($env:JOB_STATUS.ToUpper()) - $env:GITHUB_RUN_ID" --body "Tracker 3.0 clean build finished.`n`nStatus: $env:JOB_STATUS`nRun ID: $env:GITHUB_RUN_ID`nCommit: $env:GITHUB_SHA`nRun: $url`nArtifact: DOWNLOAD-Sterling-Tracker-3.0.0"
