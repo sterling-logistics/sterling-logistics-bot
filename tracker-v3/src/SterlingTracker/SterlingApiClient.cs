@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -59,6 +60,34 @@ internal sealed class SterlingApiClient : IDisposable
         catch { return false; }
     }
 
+    private static double JsonDouble(JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Number) return value.GetDouble();
+        if (value.ValueKind == JsonValueKind.String && double.TryParse(value.GetString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed)) return parsed;
+        return 0;
+    }
+
+    private static int JsonInt(JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Number) return value.GetInt32();
+        if (value.ValueKind == JsonValueKind.String && int.TryParse(value.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)) return parsed;
+        return 0;
+    }
+
+    private static long JsonLong(JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Number) return value.GetInt64();
+        if (value.ValueKind == JsonValueKind.String && long.TryParse(value.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)) return parsed;
+        throw new InvalidOperationException("Payout id returned by the server is invalid.");
+    }
+
+    private static decimal JsonDecimal(JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Number) return value.GetDecimal();
+        if (value.ValueKind == JsonValueKind.String && decimal.TryParse(value.GetString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed)) return parsed;
+        throw new InvalidOperationException("Payout amount returned by the server is invalid.");
+    }
+
     public async Task<DriverProfile?> GetProfileAsync(CancellationToken ct = default)
     {
         if (!IsAuthenticated) return null;
@@ -73,8 +102,8 @@ internal sealed class SterlingApiClient : IDisposable
             SterlingDriverId = d.TryGetProperty("sterlingDriverId", out var id) ? id.GetString() ?? "" : "",
             DiscordUsername = d.TryGetProperty("discordUsername", out var u) ? u.GetString() ?? "" : "",
             Rank = d.TryGetProperty("rank", out var r) && r.ValueKind != JsonValueKind.Null ? r.GetString() : null,
-            TotalMiles = d.TryGetProperty("totalMiles", out var m) ? m.GetDouble() : 0,
-            JobsCompleted = d.TryGetProperty("jobsCompleted", out var j) ? j.GetInt32() : 0
+            TotalMiles = d.TryGetProperty("totalMiles", out var m) ? JsonDouble(m) : 0,
+            JobsCompleted = d.TryGetProperty("jobsCompleted", out var j) ? JsonInt(j) : 0
         };
     }
 
@@ -153,7 +182,7 @@ internal sealed class SterlingApiClient : IDisposable
         if (!doc.RootElement.TryGetProperty("payout", out var p) || p.ValueKind == JsonValueKind.Null) return null;
         DateTime? requested = null;
         if (p.TryGetProperty("requested_at", out var r) && r.ValueKind == JsonValueKind.String && DateTime.TryParse(r.GetString(), out var dt)) requested = dt;
-        return new PendingPayout(p.GetProperty("id").GetInt64(), p.GetProperty("amount").GetDecimal(), requested);
+        return new PendingPayout(JsonLong(p.GetProperty("id")), JsonDecimal(p.GetProperty("amount")), requested);
     }
 
     public async Task CompletePayoutAsync(long id, string savePath, CancellationToken ct = default)
