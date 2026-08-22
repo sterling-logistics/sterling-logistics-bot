@@ -21,7 +21,8 @@ try {
   $telemetryFile = Join-Path $dest 'SCSSdkTelemetry.cs'
   $telemetryCode = Get-Content $telemetryFile -Raw
   if ($telemetryCode -notmatch 'using Timer = System\.Threading\.Timer;') {
-    $telemetryCode = $telemetryCode -replace 'using System\.Threading;','using System.Threading;`r`nusing Timer = System.Threading.Timer;'
+    $replacement = "using System.Threading;`r`nusing Timer = System.Threading.Timer;"
+    $telemetryCode = $telemetryCode -replace 'using System\.Threading;', $replacement
     Set-Content -Path $telemetryFile -Value $telemetryCode -Encoding utf8
   }
 
