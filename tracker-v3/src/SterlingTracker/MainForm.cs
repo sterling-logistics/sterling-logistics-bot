@@ -205,7 +205,7 @@ internal sealed class MainForm : Form
 
     private void Log(string text)
     {
-        if (InvokeRequired) { BeginInvoke(() => Log(text)); return; }
+        if (InvokeRequired) { BeginInvoke(new Action(() => Log(text))); return; }
         _log.AppendText($"[{DateTime.Now:HH:mm:ss}] {text}{Environment.NewLine}");
     }
 
@@ -226,7 +226,9 @@ internal sealed class MainForm : Form
     {
         grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / Math.Max(1, grid.RowCount)));
         grid.Controls.Add(new Label { Text = name, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.FromArgb(154, 177, 202) }, 0, row);
-        value.Dock = DockStyle.Fill; value.TextAlign = ContentAlignment.MiddleLeft; grid.Controls.Add(value, 1, row);
+        value.Dock = DockStyle.Fill;
+        if (value is Label label) label.TextAlign = ContentAlignment.MiddleLeft;
+        grid.Controls.Add(value, 1, row);
     }
 
     private static Label ValueLabel() => new() { Text = "—", AutoEllipsis = true, ForeColor = Color.White };
