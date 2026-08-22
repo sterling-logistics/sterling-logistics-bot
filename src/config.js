@@ -17,7 +17,10 @@ export function loadConfig(){
     transcriptsChannelId:process.env.TRANSCRIPTS_CHANNEL_ID.trim(),
     reviewsChannelId:process.env.REVIEWS_CHANNEL_ID.trim(),
     db:{host:process.env.DB_HOST.trim(),port:n(process.env.DB_PORT,3306),database:process.env.DB_NAME?.trim()||"s248720_sterling_logistics",user:process.env.DB_USER.trim(),password:process.env.DB_PASSWORD},
-    port:n(process.env.PORT,8101),
+    // Pterodactyl exposes the server's primary allocation as SERVER_PORT.
+    // Prefer it over a stale PORT value from .env so the API binds to the
+    // same externally assigned port the tracker used before the v3 rebuild.
+    port:n(process.env.SERVER_PORT,n(process.env.PORT,8101)),
     enableMessageContentIntent:b(process.env.ENABLE_MESSAGE_CONTENT_INTENT),
     telemetryApiSecret:process.env.TELEMETRY_API_SECRET?.trim()||null,
     truckersMpApiToken:process.env.TRUCKERSMP_API_TOKEN?.trim()||null,
