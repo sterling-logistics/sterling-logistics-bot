@@ -8,10 +8,11 @@ namespace SterlingTracker;
 internal sealed class SterlingApiClient : IDisposable
 {
     private readonly TrackerState _state;
-    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(15) };
+    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(10) };
 
     public SterlingApiClient(TrackerState state) => _state = state;
     public bool IsAuthenticated => !string.IsNullOrWhiteSpace(_state.AccessToken);
+    public string ApiBase => _state.ApiBase;
 
     private HttpRequestMessage Request(HttpMethod method, string path)
     {
@@ -20,13 +21,67 @@ internal sealed class SterlingApiClient : IDisposable
         return req;
     }
 
+    private async Task<string> ResolveApiAsync(Action<string>? status = null, CancellationToken ct = default)
+    {
+        var candidates = new[]
+        {
+            _state.ApiBase,
+            TrackerState.PrimaryApiBase,
+            "http://45.43.163.175:3000",
+            "http://45.43.163.175:8101"
+        }
+        .Where(x => !string.IsNullOrWhiteSpace(x))
+        .Select(x => x.TrimEnd('/'))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+        var failures = new List<string>();
+        foreach (var candidate in candidates)
+        {
+            ct.ThrowIfCancellationRequested();
+            status?.Invoke($"Connecting to {candidate}…");
+            try
+            {
+                using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                probeCts.CancelAfter(TimeSpan.FromSeconds(4));
+                using var res = await _http.GetAsync(candidate + "/health", probeCts.Token);
+                if (!res.IsSuccessStatusCode)
+                {
+                    failures.Add($"{candidate} returned {(int)res.StatusCode}");
+                    continue;
+                }
+
+                using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync(probeCts.Token));
+                if (!doc.RootElement.TryGetProperty("ok", out var ok) || !ok.GetBoolean())
+                {
+                    failures.Add($"{candidate} returned an unhealthy response");
+                    continue;
+                }
+
+                if (!string.Equals(_state.ApiBase, candidate, StringComparison.OrdinalIgnoreCase))
+                {
+                    _state.ApiBase = candidate;
+                    LocalState.Save(_state);
+                }
+                status?.Invoke($"Sterling API connected • {candidate}");
+                return candidate;
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                failures.Add($"{candidate} timed out");
+            }
+            catch (Exception ex)
+            {
+                failures.Add($"{candidate}: {ex.Message}");
+            }
+        }
+
+        throw new HttpRequestException("Sterling API is unreachable. " + string.Join(" | ", failures));
+    }
+
     public async Task<bool> CheckHealthAsync(CancellationToken ct = default)
     {
-        try
-        {
-            using var res = await _http.GetAsync(_state.ApiBase.TrimEnd('/') + "/health", ct);
-            return res.IsSuccessStatusCode;
-        }
+        try { await ResolveApiAsync(null, ct); return true; }
         catch { return false; }
     }
 
@@ -51,14 +106,16 @@ internal sealed class SterlingApiClient : IDisposable
 
     public async Task<DriverProfile> SignInAsync(Action<string>? status = null, CancellationToken ct = default)
     {
+        await ResolveApiAsync(status, ct);
         status?.Invoke("Starting Discord login…");
         using var start = new HttpRequestMessage(HttpMethod.Post, _state.ApiBase.TrimEnd('/') + "/auth/desktop/start")
         {
             Content = JsonContent.Create(new { deviceName = $"Sterling Tracker 3.0 • {Environment.MachineName}" })
         };
         using var startRes = await _http.SendAsync(start, ct);
-        startRes.EnsureSuccessStatusCode();
-        using var startDoc = JsonDocument.Parse(await startRes.Content.ReadAsStringAsync(ct));
+        var startBody = await startRes.Content.ReadAsStringAsync(ct);
+        if (!startRes.IsSuccessStatusCode) throw new InvalidOperationException($"Sterling login service returned {(int)startRes.StatusCode}: {startBody}");
+        using var startDoc = JsonDocument.Parse(startBody);
         var root = startDoc.RootElement;
         var state = root.GetProperty("state").GetString() ?? throw new InvalidOperationException("Login state missing");
         var authorizeUrl = root.GetProperty("authorizeUrl").GetString() ?? throw new InvalidOperationException("Discord login URL missing");
