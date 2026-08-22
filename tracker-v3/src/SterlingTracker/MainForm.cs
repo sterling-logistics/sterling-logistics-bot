@@ -26,6 +26,7 @@ internal sealed class MainForm : Form
     private readonly Button _signIn = Button("Sign in with Discord");
     private readonly Button _signOut = Button("Sign out");
     private readonly Button _installPlugin = Button("Install ETS2 telemetry");
+    private readonly Button _applyPayout = Button("Apply pending payout to ETS2 / TMP");
 
     private DriverProfile? _profile;
     private DateTime _lastHeartbeat = DateTime.MinValue;
@@ -36,16 +37,16 @@ internal sealed class MainForm : Form
     public MainForm()
     {
         _api = new SterlingApiClient(_state);
-        Text = "Sterling Tracker 3.0";
-        MinimumSize = new Size(920, 650);
-        Size = new Size(1080, 760);
+        Text = "Sterling Tracker 3.0.6";
+        MinimumSize = new Size(920, 680);
+        Size = new Size(1080, 790);
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Color.FromArgb(7, 15, 27);
         ForeColor = Color.White;
         Font = new Font("Segoe UI", 10f);
 
         var header = new Panel { Dock = DockStyle.Top, Height = 82, Padding = new Padding(22, 14, 22, 8) };
-        var title = new Label { Text = "STERLING TRACKER 3.0", AutoSize = true, Font = new Font("Segoe UI Semibold", 22f, FontStyle.Bold), ForeColor = Color.FromArgb(76, 169, 255), Location = new Point(20, 14) };
+        var title = new Label { Text = "STERLING TRACKER 3.0.6", AutoSize = true, Font = new Font("Segoe UI Semibold", 22f, FontStyle.Bold), ForeColor = Color.FromArgb(76, 169, 255), Location = new Point(20, 14) };
         var subtitle = new Label { Text = "Direct ETS2 telemetry • Sterling Logistics live operations", AutoSize = true, ForeColor = Color.FromArgb(174, 193, 214), Location = new Point(23, 52) };
         header.Controls.Add(title); header.Controls.Add(subtitle);
 
@@ -62,12 +63,13 @@ internal sealed class MainForm : Form
         live.Controls.Add(liveGrid);
 
         var connection = Card("CONNECTION");
-        var connGrid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 7, Padding = new Padding(16, 42, 16, 12) };
+        var connGrid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 8, Padding = new Padding(16, 42, 16, 12) };
         connGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 36)); connGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 64));
         AddRow(connGrid, 0, "Driver", _driver); AddRow(connGrid, 1, "Sterling API", _apiStatus); AddRow(connGrid, 2, "ETS2", _ets2Status); AddRow(connGrid, 3, "Driver stats", _stats);
         connGrid.Controls.Add(_signIn, 0, 4); connGrid.SetColumnSpan(_signIn, 2);
         connGrid.Controls.Add(_signOut, 0, 5); connGrid.SetColumnSpan(_signOut, 2);
         connGrid.Controls.Add(_installPlugin, 0, 6); connGrid.SetColumnSpan(_installPlugin, 2);
+        connGrid.Controls.Add(_applyPayout, 0, 7); connGrid.SetColumnSpan(_applyPayout, 2);
         connection.Controls.Add(connGrid);
 
         var logCard = Card("ACTIVITY");
@@ -79,11 +81,12 @@ internal sealed class MainForm : Form
         _signIn.Click += async (_, _) => await SignInAsync();
         _signOut.Click += async (_, _) => await SignOutAsync();
         _installPlugin.Click += (_, _) => InstallPlugin();
+        _applyPayout.Click += async (_, _) => await ApplyPayoutAsync();
         _telemetry.SnapshotChanged += s => Ui(() => UpdateSnapshot(s));
         _telemetry.StatusChanged += s => Ui(() => _ets2Status.Text = s);
         _telemetry.TrackerEvent += (type, snap) => _ = SendEventAsync(type, snap);
 
-        _tray = new NotifyIcon { Text = "Sterling Tracker 3.0", Icon = SystemIcons.Application, Visible = true };
+        _tray = new NotifyIcon { Text = "Sterling Tracker 3.0.6", Icon = SystemIcons.Application, Visible = true };
         _tray.DoubleClick += (_, _) => { Show(); WindowState = FormWindowState.Normal; Activate(); };
         Resize += (_, _) => { if (WindowState == FormWindowState.Minimized) { Hide(); _tray.ShowBalloonTip(1200, "Sterling Tracker", "Tracker is still running in the background.", ToolTipIcon.Info); } };
         FormClosed += async (_, _) => await ShutdownAsync();
@@ -92,7 +95,7 @@ internal sealed class MainForm : Form
 
     private async Task StartupAsync()
     {
-        Log("Tracker 3.0 starting");
+        Log("Tracker 3.0.6 starting");
         Log("API: " + _state.ApiBase);
         _telemetry.Start();
         _ = HeartbeatLoopAsync(_shutdown.Token);
@@ -124,6 +127,71 @@ internal sealed class MainForm : Form
     {
         await _api.LogoutAsync(_shutdown.Token);
         _profile = null; RenderProfile(); Log("Signed out");
+    }
+
+    private async Task ApplyPayoutAsync()
+    {
+        _applyPayout.Enabled = false;
+        PendingPayout? payout = null;
+        try
+        {
+            if (!_api.IsAuthenticated) throw new InvalidOperationException("Sign in with Discord first.");
+            if (Ets2PayoutService.IsGameRunning()) throw new InvalidOperationException("Close ETS2 and TruckersMP completely before applying money to the save.");
+
+            payout = await _api.GetPendingPayoutAsync(_shutdown.Token);
+            if (payout is null)
+            {
+                Log("No pending ETS2 payout found on the server");
+                MessageBox.Show("There is no pending Sterling payout. Use /withdraw in Discord first, then come back here.", "Sterling payout", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            var saves = Ets2PayoutService.FindSaves();
+            if (saves.Count == 0) throw new InvalidOperationException("No ETS2 game.sii saves were found in your Documents\\Euro Truck Simulator 2 folder.");
+            var newest = saves[0];
+
+            Log($"Pending payout #{payout.Id}: £{payout.Amount:N2}");
+            Log($"Newest detected save: {newest.FullName}");
+
+            using var picker = new OpenFileDialog
+            {
+                Title = $"Select the exact ETS2/TMP save to receive £{payout.Amount:N2}",
+                Filter = "ETS2 save (game.sii)|game.sii|All files (*.*)|*.*",
+                CheckFileExists = true,
+                Multiselect = false,
+                InitialDirectory = newest.DirectoryName,
+                FileName = "game.sii"
+            };
+
+            var choice = MessageBox.Show(
+                $"Sterling found {saves.Count} ETS2 save file(s).\n\nTo make sure the money goes into the profile/save you actually use in TruckersMP, the next window will ask you to select its game.sii file.\n\nNewest detected save:\n{newest.FullName}\n\nContinue?",
+                "Select your active ETS2/TMP save",
+                MessageBoxButtons.OKCancel,
+                MessageBoxIcon.Information);
+            if (choice != DialogResult.OK) return;
+            if (picker.ShowDialog(this) != DialogResult.OK) return;
+
+            var selected = picker.FileName;
+            Log("Selected payout save: " + selected);
+
+            var result = Ets2PayoutService.ApplyToSave(payout.Amount, selected);
+            await _api.CompletePayoutAsync(payout.Id, result.SavePath, _shutdown.Token);
+
+            Log($"PAYOUT APPLIED: £{payout.Amount:N2} • ETS2 £{result.OldBalance:N0} -> £{result.NewBalance:N0}");
+            Log("Backup: " + result.BackupPath);
+            MessageBox.Show(
+                $"Success.\n\nETS2 balance changed from £{result.OldBalance:N0} to £{result.NewBalance:N0}.\n\nSave edited:\n{result.SavePath}\n\nA backup was created before the change. You can now start ETS2 / TruckersMP and load THIS save.",
+                "Sterling payout applied",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            Log("Payout failed: " + ex.Message);
+            if (payout is not null) await _api.FailPayoutAsync(payout.Id, ex.Message, CancellationToken.None);
+            MessageBox.Show(ex.Message, "Sterling payout failed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        finally { _applyPayout.Enabled = true; }
     }
 
     private async Task HeartbeatLoopAsync(CancellationToken ct)
@@ -245,6 +313,7 @@ internal sealed class MainForm : Form
         _driver.Text = _profile is null ? "Not signed in" : $"{_profile.SterlingDriverId} • {_profile.DiscordUsername}";
         _stats.Text = _profile is null ? "—" : $"{_profile.TotalMiles:N0} miles • {_profile.JobsCompleted:N0} jobs • {_profile.Rank ?? "Driver"}";
         _signIn.Visible = _profile is null; _signOut.Visible = _profile is not null;
+        _applyPayout.Visible = _profile is not null;
     }
 
     private void Log(string text)
