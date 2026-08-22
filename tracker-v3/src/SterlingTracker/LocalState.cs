@@ -13,30 +13,19 @@ internal static class LocalState
         Directory.CreateDirectory(Root);
         try
         {
-            if (!File.Exists(StatePath)) return NewState();
-            var state = JsonSerializer.Deserialize<TrackerState>(File.ReadAllText(StatePath), JsonOptions) ?? NewState();
-            var envApi = Environment.GetEnvironmentVariable("STERLING_TRACKER_API");
-            if (!string.IsNullOrWhiteSpace(envApi))
-            {
-                state.ApiBase = envApi.TrimEnd('/');
-            }
-            else if (string.IsNullOrWhiteSpace(state.ApiBase) || IsLegacyApi(state.ApiBase))
-            {
-                state.ApiBase = TrackerState.PrimaryApiBase;
-                Save(state);
-            }
+            var state = File.Exists(StatePath)
+                ? JsonSerializer.Deserialize<TrackerState>(File.ReadAllText(StatePath), JsonOptions) ?? NewState()
+                : NewState();
+
+            // Tracker 3.0.3 is pinned to the dedicated Tracker API host.
+            // Old saved values and old STERLING_TRACKER_API values must not
+            // route the desktop app back to the Discord bot host.
+            state.ApiBase = TrackerState.PrimaryApiBase;
             if (string.IsNullOrWhiteSpace(state.SessionCode)) state.SessionCode = $"trk3-{Guid.NewGuid():N}";
+            Save(state);
             return state;
         }
         catch { return NewState(); }
-    }
-
-    private static bool IsLegacyApi(string value)
-    {
-        var api = value.TrimEnd('/');
-        return string.Equals(api, TrackerState.LegacyApiBase, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(api, TrackerState.LegacyApiBase8101, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(api, TrackerState.LegacyWebsiteApiBase, StringComparison.OrdinalIgnoreCase);
     }
 
     public static void Save(TrackerState state)
@@ -47,9 +36,10 @@ internal static class LocalState
 
     private static TrackerState NewState()
     {
-        var state = new TrackerState();
-        var envApi = Environment.GetEnvironmentVariable("STERLING_TRACKER_API");
-        if (!string.IsNullOrWhiteSpace(envApi)) state.ApiBase = envApi.TrimEnd('/');
+        var state = new TrackerState
+        {
+            ApiBase = TrackerState.PrimaryApiBase
+        };
         Save(state);
         return state;
     }
