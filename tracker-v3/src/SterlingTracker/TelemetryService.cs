@@ -9,6 +9,7 @@ internal sealed class TelemetryService : IDisposable
     private SCSSdkTelemetry? _telemetry;
     private readonly object _gate = new();
     private TelemetrySnapshot _latest = new();
+    private bool _onJob, _delivered, _cancelled, _fined, _toll, _ferry, _train;
 
     public TelemetrySnapshot Latest { get { lock (_gate) return _latest; } }
     public bool Connected => _telemetry is { Error: null } && Latest.SdkActive;
@@ -29,13 +30,6 @@ internal sealed class TelemetryService : IDisposable
                 return;
             }
             _telemetry.Data += OnData;
-            _telemetry.JobStarted += (_, _) => Raise("job-started");
-            _telemetry.JobDelivered += (_, _) => Raise("job-delivered");
-            _telemetry.JobCancelled += (_, _) => Raise("job-cancelled");
-            _telemetry.Fined += (_, _) => Raise("fine");
-            _telemetry.Tollgate += (_, _) => Raise("toll");
-            _telemetry.Ferry += (_, _) => Raise("ferry");
-            _telemetry.Train += (_, _) => Raise("train");
             StatusChanged?.Invoke("Telemetry client connected; start ETS2");
         }
         catch (Exception ex)
@@ -86,12 +80,21 @@ internal sealed class TelemetryService : IDisposable
         lock (_gate) _latest = snapshot;
         SnapshotChanged?.Invoke(snapshot);
         StatusChanged?.Invoke(snapshot.SdkActive ? (snapshot.Paused ? "ETS2 connected • paused" : "ETS2 connected • live") : "ETS2 telemetry inactive");
+
+        var s = data.SpecialEventsValues;
+        Rising(s.OnJob, ref _onJob, "job-started", snapshot);
+        Rising(s.JobDelivered, ref _delivered, "job-delivered", snapshot);
+        Rising(s.JobCancelled, ref _cancelled, "job-cancelled", snapshot);
+        Rising(s.Fined, ref _fined, "fine", snapshot);
+        Rising(s.Tollgate, ref _toll, "toll", snapshot);
+        Rising(s.Ferry, ref _ferry, "ferry", snapshot);
+        Rising(s.Train, ref _train, "train", snapshot);
     }
 
-    private void Raise(string eventType)
+    private void Rising(bool value, ref bool previous, string eventType, TelemetrySnapshot snapshot)
     {
-        var snapshot = Latest;
-        TrackerEvent?.Invoke(eventType, snapshot);
+        if (value && !previous) TrackerEvent?.Invoke(eventType, snapshot);
+        previous = value;
     }
 
     private static double Max(params double[] values) => values.Length == 0 ? 0 : values.Max();
