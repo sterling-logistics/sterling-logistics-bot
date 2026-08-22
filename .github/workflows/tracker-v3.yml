@@ -30,7 +30,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $url="https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
-          gh issue edit 8 --title "Sterling Tracker 3.0 build RUNNING - $env:GITHUB_RUN_ID" --body "Tracker 3.0 clean build started.`n`nRun ID: $env:GITHUB_RUN_ID`nCommit: $env:GITHUB_SHA`nRun: $url"
+          gh issue edit 8 --title "Sterling Tracker 3.0.1 build RUNNING - $env:GITHUB_RUN_ID" --body "Tracker 3.0.1 API connectivity build started.`n`nRun ID: $env:GITHUB_RUN_ID`nCommit: $env:GITHUB_SHA`nRun: $url"
           if($LASTEXITCODE -ne 0){throw 'Could not publish build monitor status'}
 
       - name: Setup .NET 8
@@ -46,7 +46,7 @@ jobs:
         shell: pwsh
         run: dotnet restore .\tracker-v3\src\SterlingTracker\SterlingTracker.csproj -r win-x64
 
-      - name: Publish Tracker 3.0
+      - name: Publish Tracker 3.0.1
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
@@ -89,7 +89,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path .\tracker-v3\dist | Out-Null
           & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' .\tracker-v3\installer\SterlingTrackerV3.iss
           if($LASTEXITCODE -ne 0){throw 'Inno Setup failed'}
-          $installer='.\tracker-v3\dist\SterlingTracker-3.0.0-Setup.exe'
+          $installer='.\tracker-v3\dist\SterlingTracker-3.0.1-Setup.exe'
           if(-not (Test-Path $installer)){throw 'Sterling Tracker installer was not created'}
           if((Get-Item $installer).Length -lt 1000000){throw 'Installer is unexpectedly small'}
           Get-FileHash $installer -Algorithm SHA256 | Format-List
@@ -97,8 +97,8 @@ jobs:
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DOWNLOAD-Sterling-Tracker-3.0.0
-          path: tracker-v3/dist/SterlingTracker-3.0.0-Setup.exe
+          name: DOWNLOAD-Sterling-Tracker-3.0.1
+          path: tracker-v3/dist/SterlingTracker-3.0.1-Setup.exe
           if-no-files-found: error
           retention-days: 30
 
@@ -110,4 +110,4 @@ jobs:
           JOB_STATUS: ${{ job.status }}
         run: |
           $url="https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
-          gh issue edit 8 --title "Sterling Tracker 3.0 build $($env:JOB_STATUS.ToUpper()) - $env:GITHUB_RUN_ID" --body "Tracker 3.0 clean build finished.`n`nStatus: $env:JOB_STATUS`nRun ID: $env:GITHUB_RUN_ID`nCommit: $env:GITHUB_SHA`nRun: $url`nArtifact: DOWNLOAD-Sterling-Tracker-3.0.0"
+          gh issue edit 8 --title "Sterling Tracker 3.0.1 build $($env:JOB_STATUS.ToUpper()) - $env:GITHUB_RUN_ID" --body "Tracker 3.0.1 API connectivity build finished.`n`nStatus: $env:JOB_STATUS`nRun ID: $env:GITHUB_RUN_ID`nCommit: $env:GITHUB_SHA`nRun: $url`nArtifact: DOWNLOAD-Sterling-Tracker-3.0.1"
