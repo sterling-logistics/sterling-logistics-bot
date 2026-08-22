@@ -1,5 +1,5 @@
 #define MyAppName "Sterling Tracker"
-#define MyAppVersion "3.0.3"
+#define MyAppVersion "3.0.4"
 #define MyAppPublisher "Sterling Logistics"
 #define MyAppExeName "SterlingTracker.exe"
 
@@ -15,14 +15,14 @@ DefaultDirName={localappdata}\Programs\Sterling Logistics\Tracker
 DefaultGroupName=Sterling Logistics
 DisableProgramGroupPage=yes
 OutputDir=..\dist
-OutputBaseFilename=SterlingTracker-3.0.3-Setup
+OutputBaseFilename=SterlingTracker-3.0.4-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-UninstallDisplayName=Sterling Tracker 3.0.3
+UninstallDisplayName=Sterling Tracker 3.0.4
 CloseApplications=yes
 RestartApplications=no
 
