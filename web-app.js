@@ -1,22 +1,31 @@
 import dotenv from "dotenv";
 import express from "express";
-import {initDatabase,pingDatabase} from "./src/database/mysql.js";
-import {ensureEconomySchema} from "./src/economy/service.js";
+import {initDatabase,pingDatabase,ensureSchema} from "./src/database/mysql.js";
+import {ensureEconomySchema,getPendingEts2Payout,completeEts2Payout,failEts2Payout} from "./src/economy/service.js";
 import {ensureWebsiteSchema,registerWebsiteRoutes} from "./src/web/site.js";
 import {ensureApplicationSchema,registerApplicationRoutes} from "./src/web/applications.js";
 import {registerPublicLiveRoutes} from "./src/web/public-live.js";
+import {registerDesktopAuthRoutes,authenticateDesktopSession} from "./src/auth/desktop.js";
+import {authenticateTracker,ingestTrackerTelemetry} from "./src/telemetry/service.js";
+import {persistTrackerJobEvent} from "./src/jobs/persistence.js";
 
 dotenv.config();
 
 const app=express();
 app.set("trust proxy",1);
-app.use(express.json({limit:"256kb"}));
+app.use(express.json({limit:"512kb"}));
 
 const required=["DISCORD_APPLICATION_ID","DISCORD_CLIENT_SECRET","PUBLIC_BASE_URL","DB_HOST","DB_USER","DB_PASSWORD"];
 const missing=required.filter(k=>!process.env[k]?.trim());
 let startupError=null;
 let backendReady=false;
 let config=null;
+
+async function trackerAuth(req){
+  const auth=String(req.headers.authorization||"");
+  const token=auth.startsWith("Bearer ")?auth.slice(7):"";
+  return (await authenticateTracker(token)) || (await authenticateDesktopSession(token));
+}
 
 if(!missing.length){
   config={
@@ -36,9 +45,78 @@ if(!missing.length){
   try{
     initDatabase(config.db);
     await pingDatabase();
+    await ensureSchema();
     await ensureWebsiteSchema();
     await ensureApplicationSchema();
     await ensureEconomySchema();
+
+    registerDesktopAuthRoutes(app,config);
+
+    app.get("/api/desktop/me",async(req,res)=>{
+      try{
+        const d=await trackerAuth(req);
+        if(!d)return res.status(401).json({ok:false,error:"Session expired"});
+        res.json({ok:true,driver:{
+          sterlingDriverId:d.sterling_driver_id,
+          discordUsername:d.discord_username,
+          rank:d.rank_name||null,
+          totalMiles:Number(d.total_miles||0),
+          jobsCompleted:Number(d.jobs_completed||0)
+        }});
+      }catch(e){
+        res.status(400).json({ok:false,error:String(e.message||e)});
+      }
+    });
+
+    app.post("/api/tracker/telemetry",async(req,res)=>{
+      try{
+        const driver=await trackerAuth(req);
+        if(!driver)return res.status(401).json({ok:false,error:"Invalid tracker session"});
+        const body=req.body||{};
+        const eventType=String(body.eventType||"heartbeat");
+        const out=await ingestTrackerTelemetry(driver.driver_id,body);
+        let persistedJob=null;
+        if(["job-started","job-delivered","job-cancelled"].includes(eventType)){
+          persistedJob=await persistTrackerJobEvent(driver.driver_id,body);
+        }
+        res.json({...out,persistedJob,driver:driver.sterling_driver_id});
+      }catch(e){
+        console.error("[Sterling Web Tracker API]",e);
+        res.status(400).json({ok:false,error:String(e.message||e)});
+      }
+    });
+
+    app.get("/api/tracker/payout",async(req,res)=>{
+      try{
+        const d=await trackerAuth(req);
+        if(!d)return res.status(401).json({ok:false,error:"Invalid tracker session"});
+        res.json({ok:true,payout:await getPendingEts2Payout(d.driver_id)});
+      }catch(e){
+        res.status(400).json({ok:false,error:String(e.message||e)});
+      }
+    });
+
+    app.post("/api/tracker/payout/:id/complete",async(req,res)=>{
+      try{
+        const d=await trackerAuth(req);
+        if(!d)return res.status(401).json({ok:false,error:"Invalid tracker session"});
+        res.json({ok:await completeEts2Payout(d.driver_id,Number(req.params.id),req.body?.savePath)});
+      }catch(e){
+        res.status(400).json({ok:false,error:String(e.message||e)});
+      }
+    });
+
+    app.post("/api/tracker/payout/:id/fail",async(req,res)=>{
+      try{
+        const d=await trackerAuth(req);
+        if(!d)return res.status(401).json({ok:false,error:"Invalid tracker session"});
+        await failEts2Payout(d.driver_id,Number(req.params.id),req.body?.error);
+        res.json({ok:true});
+      }catch(e){
+        res.status(400).json({ok:false,error:String(e.message||e)});
+      }
+    });
+
     registerApplicationRoutes(app,config);
     registerPublicLiveRoutes(app);
     registerWebsiteRoutes(app,config);
@@ -64,7 +142,7 @@ app.get("/health",async(_req,res)=>{
   }
   try{
     const d=await pingDatabase();
-    res.json({ok:true,service:"sterling-web",database:d.db,discord:true});
+    res.json({ok:true,service:"sterling-web",database:d.db,discord:true,desktopLogin:true,trackerApi:true});
   }catch(e){
     res.status(503).json({ok:false,service:"sterling-web",stage:"database",error:e?.code||"DATABASE_UNAVAILABLE"});
   }
@@ -75,4 +153,4 @@ if(!backendReady){
 }
 
 const port=Number(process.env.PORT||3000);
-app.listen(port,"0.0.0.0",()=>console.log(`[Sterling Web] Listening on ${port}${backendReady?" (ready)":" (diagnostic mode)"}`));
+app.listen(port,"0.0.0.0",()=>console.log(`[Sterling Web] Listening on ${port}${backendReady?" (ready + tracker API)":" (diagnostic mode)"}`));
