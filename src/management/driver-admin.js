@@ -45,7 +45,6 @@ async function deleteDriver(i){
   const u=i.options.getUser("user",true);
   const confirm=i.options.getString("confirm",true).trim().toUpperCase();
   if(confirm!=="DELETE")return i.reply({content:"Deletion cancelled. Type **DELETE** in the confirm field to permanently remove the driver.",flags:MessageFlags.Ephemeral});
-  if(u.id===i.user.id)return i.reply({content:"You cannot delete your own driver profile with this command.",flags:MessageFlags.Ephemeral});
   const d=await getDriver(u.id);
   if(!d)return i.reply({content:"That member does not have a Sterling driver profile.",flags:MessageFlags.Ephemeral});
 
