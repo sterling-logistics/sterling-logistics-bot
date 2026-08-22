@@ -54,8 +54,15 @@ export function registerDesktopAuthRoutes(app,c){
       const redirectUri=`${c.publicBaseUrl}/auth/discord/callback`;
       const form=new URLSearchParams({client_id:c.applicationId,client_secret:c.discordClientSecret,grant_type:"authorization_code",code,redirect_uri:redirectUri});
       const tokenRes=await fetch("https://discord.com/api/v10/oauth2/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:form});
-      if(!tokenRes.ok)throw new Error(`Discord token exchange failed (${tokenRes.status})`);
-      const oauth=await tokenRes.json();
+      const tokenText=await tokenRes.text();
+      if(!tokenRes.ok){
+        let detail=tokenText;
+        try{const j=JSON.parse(tokenText);detail=String(j.error_description||j.message||j.error||tokenText);}catch{}
+        console.error("[Desktop OAuth Token Exchange]",{status:tokenRes.status,applicationId:c.applicationId,redirectUri,detail});
+        throw new Error(`Discord token exchange failed (${tokenRes.status}): ${detail}`);
+      }
+      let oauth;
+      try{oauth=JSON.parse(tokenText);}catch{throw new Error("Discord returned an invalid token response");}
       const userRes=await fetch("https://discord.com/api/v10/users/@me",{headers:{Authorization:`Bearer ${oauth.access_token}`}});
       if(!userRes.ok)throw new Error(`Discord identity lookup failed (${userRes.status})`);
       const user=await userRes.json();
