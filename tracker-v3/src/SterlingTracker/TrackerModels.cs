@@ -62,7 +62,7 @@ internal sealed class DriverProfile
 
 internal sealed class TrackerState
 {
-    public const string PrimaryApiBase = "http://45.43.163.175:8112";
+    public const string PrimaryApiBase = "http://78.108.218.104:8112";
     public const string LegacyWebsiteApiBase = "https://sterlinglogisticsvtc.co.uk";
     public const string LegacyApiBase = "http://45.43.163.175:3000";
     public const string LegacyApiBase8101 = "http://45.43.163.175:8101";
