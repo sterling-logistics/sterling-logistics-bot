@@ -29,6 +29,8 @@ internal sealed class MainForm : Form
 
     private DriverProfile? _profile;
     private DateTime _lastHeartbeat = DateTime.MinValue;
+    private DateTime _lastJobStatusCheck = DateTime.MinValue;
+    private string _lastJobStatusKey = "";
     private int _sending;
 
     public MainForm()
@@ -130,6 +132,15 @@ internal sealed class MainForm : Form
         while (await timer.WaitForNextTickAsync(ct))
         {
             if (!_api.IsAuthenticated) continue;
+
+            if ((DateTime.UtcNow - _lastJobStatusCheck) >= TimeSpan.FromSeconds(5))
+            {
+                _lastJobStatusCheck = DateTime.UtcNow;
+                try { await RefreshLatestJobStatusAsync(ct); }
+                catch (UnauthorizedAccessException) { Ui(() => { _state.AccessToken = null; LocalState.Save(_state); _profile = null; RenderProfile(); _apiStatus.Text = "Login expired"; }); continue; }
+                catch { }
+            }
+
             if (!_telemetry.Connected)
             {
                 _telemetry.Start();
@@ -145,6 +156,39 @@ internal sealed class MainForm : Form
             catch (UnauthorizedAccessException) { Ui(() => { _state.AccessToken = null; LocalState.Save(_state); _profile = null; RenderProfile(); _apiStatus.Text = "Login expired"; }); }
             catch (Exception ex) { Ui(() => { _apiStatus.Text = "Retrying"; Log("Heartbeat: " + ex.Message); }); }
             finally { Interlocked.Exchange(ref _sending, 0); }
+        }
+    }
+
+    private async Task RefreshLatestJobStatusAsync(CancellationToken ct)
+    {
+        var latest = await _api.GetLatestJobStatusAsync(ct);
+        if (latest is null) return;
+        var key = latest.Value.JobCode + "|" + latest.Value.Status;
+        if (key == _lastJobStatusKey) return;
+        _lastJobStatusKey = key;
+
+        var display = latest.Value.Status.ToLowerInvariant() switch
+        {
+            "completed" => "APPROVED",
+            "rejected" => "DECLINED",
+            "pending_review" => "PENDING REVIEW",
+            "in_progress" => "IN PROGRESS",
+            var s => s.Replace('_', ' ').ToUpperInvariant()
+        };
+        Ui(() =>
+        {
+            _jobStatus.Text = $"{display} • {latest.Value.JobCode}";
+            Log($"Job {latest.Value.JobCode} is now {display.ToLowerInvariant()}");
+        });
+
+        if (latest.Value.Status.Equals("completed", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                _profile = await _api.GetProfileAsync(ct);
+                Ui(RenderProfile);
+            }
+            catch { }
         }
     }
 
