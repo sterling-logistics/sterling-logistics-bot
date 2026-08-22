@@ -20,6 +20,11 @@ internal sealed class TelemetryService : IDisposable
 
     public void Start()
     {
+        if (_telemetry is { Error: not null })
+        {
+            _telemetry.Dispose();
+            _telemetry = null;
+        }
         if (_telemetry is not null) return;
         try
         {
