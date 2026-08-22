@@ -102,8 +102,9 @@ internal static class Ets2PayoutService
             var config = Path.Combine(docs, "Euro Truck Simulator 2", "config.cfg");
             if (!File.Exists(config)) return;
             var text = File.ReadAllText(config);
-            if (Regex.IsMatch(text, @"uset\s+g_save_format\s+\"[^\"]*\"", RegexOptions.IgnoreCase))
-                text = Regex.Replace(text, @"uset\s+g_save_format\s+\"[^\"]*\"", "uset g_save_format \"2\"", RegexOptions.IgnoreCase);
+            const string pattern = "uset\\s+g_save_format\\s+\"[^\"]*\"";
+            if (Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase))
+                text = Regex.Replace(text, pattern, "uset g_save_format \"2\"", RegexOptions.IgnoreCase);
             else
                 text += Environment.NewLine + "uset g_save_format \"2\"" + Environment.NewLine;
             File.WriteAllText(config, text, new UTF8Encoding(false));
