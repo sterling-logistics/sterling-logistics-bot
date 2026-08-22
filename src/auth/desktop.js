@@ -52,8 +52,9 @@ export function registerDesktopAuthRoutes(app,c){
     try{
       if(!code)throw new Error("Discord did not return an authorization code");
       const redirectUri=`${c.publicBaseUrl}/auth/discord/callback`;
-      const form=new URLSearchParams({client_id:c.applicationId,client_secret:c.discordClientSecret,grant_type:"authorization_code",code,redirect_uri:redirectUri});
-      const tokenRes=await fetch("https://discord.com/api/v10/oauth2/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:form});
+      const form=new URLSearchParams({grant_type:"authorization_code",code,redirect_uri:redirectUri});
+      const basic=Buffer.from(`${c.applicationId}:${c.discordClientSecret}`,"utf8").toString("base64");
+      const tokenRes=await fetch("https://discord.com/api/v10/oauth2/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Authorization":`Basic ${basic}`},body:form});
       const tokenText=await tokenRes.text();
       if(!tokenRes.ok){
         let detail=tokenText;
