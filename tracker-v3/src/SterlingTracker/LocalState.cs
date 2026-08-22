@@ -20,7 +20,7 @@ internal static class LocalState
             {
                 state.ApiBase = envApi.TrimEnd('/');
             }
-            else if (string.IsNullOrWhiteSpace(state.ApiBase) || string.Equals(state.ApiBase.TrimEnd('/'), TrackerState.LegacyApiBase, StringComparison.OrdinalIgnoreCase))
+            else if (string.IsNullOrWhiteSpace(state.ApiBase) || IsLegacyApi(state.ApiBase))
             {
                 state.ApiBase = TrackerState.PrimaryApiBase;
                 Save(state);
@@ -29,6 +29,14 @@ internal static class LocalState
             return state;
         }
         catch { return NewState(); }
+    }
+
+    private static bool IsLegacyApi(string value)
+    {
+        var api = value.TrimEnd('/');
+        return string.Equals(api, TrackerState.LegacyApiBase, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(api, TrackerState.LegacyApiBase8101, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(api, TrackerState.LegacyWebsiteApiBase, StringComparison.OrdinalIgnoreCase);
     }
 
     public static void Save(TrackerState state)
