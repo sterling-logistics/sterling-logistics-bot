@@ -58,6 +58,10 @@ async function ensureSchema(){
     distance_miles DECIMAL(12,2) NOT NULL DEFAULT 0,revenue DECIMAL(16,2) NOT NULL DEFAULT 0,driver_payment DECIMAL(16,2) NOT NULL DEFAULT 0,
     damage DECIMAL(8,4) NOT NULL DEFAULT 0,status VARCHAR(30) NOT NULL DEFAULT 'pending',reviewed_by VARCHAR(32),review_notes VARCHAR(1000),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,reviewed_at TIMESTAMP NULL,INDEX(status,created_at),INDEX(driver_id,created_at),INDEX(job_code))`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS ets2_payouts(
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,driver_id BIGINT UNSIGNED NOT NULL,amount DECIMAL(16,2) NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'pending',requested_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,applied_at TIMESTAMP NULL,
+    save_path VARCHAR(500),error_text VARCHAR(1000),INDEX(driver_id,status,requested_at))`);
 }
 
 async function auth(req){
@@ -109,6 +113,10 @@ app.post("/auth/desktop/logout",async(req,res)=>{const h=String(req.headers.auth
 
 app.get("/api/desktop/me",async(req,res)=>{try{const d=await auth(req);if(!d)return res.status(401).json({ok:false,error:"Session expired"});res.json({ok:true,driver:{sterlingDriverId:d.sterling_driver_id,discordUsername:d.discord_username,rank:d.rank_name,totalMiles:Number(d.total_miles||0),jobsCompleted:Number(d.jobs_completed||0)}});}catch(e){res.status(400).json({ok:false,error:String(e.message||e)});}});
 app.get("/api/tracker/jobs",async(req,res)=>{try{const d=await auth(req);if(!d)return res.status(401).json({ok:false,error:"Session expired"});const[r]=await pool.execute("SELECT job_code,status,cargo,origin_city,destination_city,distance_miles,income,started_at,completed_at FROM jobs WHERE driver_id=? ORDER BY id DESC LIMIT 20",[d.driver_id]);res.json({ok:true,jobs:r});}catch(e){res.status(400).json({ok:false,error:String(e.message||e)});}});
+
+app.get("/api/tracker/payout",async(req,res)=>{try{const d=await auth(req);if(!d)return res.status(401).json({ok:false,error:"Invalid tracker session"});const[r]=await pool.execute("SELECT id,amount,requested_at FROM ets2_payouts WHERE driver_id=? AND status='pending' ORDER BY requested_at ASC LIMIT 1",[d.driver_id]);res.json({ok:true,payout:r[0]||null});}catch(e){res.status(400).json({ok:false,error:String(e.message||e)});}});
+app.post("/api/tracker/payout/:id/complete",async(req,res)=>{try{const d=await auth(req);if(!d)return res.status(401).json({ok:false,error:"Invalid tracker session"});const id=Number(req.params.id);const[r]=await pool.execute("UPDATE ets2_payouts SET status='applied',applied_at=NOW(),save_path=?,error_text=NULL WHERE id=? AND driver_id=? AND status='pending'",[String(req.body?.savePath||'').slice(0,500),id,d.driver_id]);if(r.affectedRows){await pool.execute("UPDATE driver_wallets SET total_withdrawn=total_withdrawn+(SELECT amount FROM ets2_payouts WHERE id=?) WHERE driver_id=?",[id,d.driver_id]);}res.json({ok:r.affectedRows>0});}catch(e){res.status(400).json({ok:false,error:String(e.message||e)});}});
+app.post("/api/tracker/payout/:id/fail",async(req,res)=>{try{const d=await auth(req);if(!d)return res.status(401).json({ok:false,error:"Invalid tracker session"});await pool.execute("UPDATE ets2_payouts SET error_text=? WHERE id=? AND driver_id=? AND status='pending'",[String(req.body?.error||'Unknown error').slice(0,1000),Number(req.params.id),d.driver_id]);res.json({ok:true});}catch(e){res.status(400).json({ok:false,error:String(e.message||e)});}});
 
 app.post("/api/tracker/telemetry",async(req,res)=>{
   try{
