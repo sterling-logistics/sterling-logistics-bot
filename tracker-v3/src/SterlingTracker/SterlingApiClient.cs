@@ -9,6 +9,7 @@ internal sealed class SterlingApiClient : IDisposable
 {
     private readonly TrackerState _state;
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(10) };
+    private DateTime _lastPayoutCheck = DateTime.MinValue;
 
     public SterlingApiClient(TrackerState state)
     {
@@ -23,6 +24,13 @@ internal sealed class SterlingApiClient : IDisposable
     private HttpRequestMessage Request(HttpMethod method, string path)
     {
         var req = new HttpRequestMessage(method, TrackerState.PrimaryApiBase.TrimEnd('/') + path);
+        if (IsAuthenticated) req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _state.AccessToken);
+        return req;
+    }
+
+    private HttpRequestMessage BotApiRequest(HttpMethod method, string path)
+    {
+        var req = new HttpRequestMessage(method, TrackerState.LegacyApiBase8101.TrimEnd('/') + path);
         if (IsAuthenticated) req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _state.AccessToken);
         return req;
     }
@@ -80,7 +88,7 @@ internal sealed class SterlingApiClient : IDisposable
     {
         await ResolveApiAsync(status, ct);
         status?.Invoke("Starting Discord login…");
-        using var start = new HttpRequestMessage(HttpMethod.Post, TrackerState.PrimaryApiBase.TrimEnd('/') + "/auth/desktop/start") { Content = JsonContent.Create(new { deviceName = $"Sterling Tracker 3.0.3 • {Environment.MachineName}" }) };
+        using var start = new HttpRequestMessage(HttpMethod.Post, TrackerState.PrimaryApiBase.TrimEnd('/') + "/auth/desktop/start") { Content = JsonContent.Create(new { deviceName = $"Sterling Tracker 3.0.4 • {Environment.MachineName}" }) };
         using var startRes = await _http.SendAsync(start, ct);
         var startBody = await startRes.Content.ReadAsStringAsync(ct);
         if (!startRes.IsSuccessStatusCode) throw new InvalidOperationException($"Sterling login service returned {(int)startRes.StatusCode}: {startBody}");
@@ -133,9 +141,59 @@ internal sealed class SterlingApiClient : IDisposable
         return JsonDocument.Parse(body);
     }
 
+    private async Task TryApplyPendingPayoutAsync(CancellationToken ct)
+    {
+        if (!IsAuthenticated) return;
+        if ((DateTime.UtcNow - _lastPayoutCheck) < TimeSpan.FromSeconds(15)) return;
+        _lastPayoutCheck = DateTime.UtcNow;
+
+        try
+        {
+            using var req = BotApiRequest(HttpMethod.Get, "/api/tracker/payout");
+            using var res = await _http.SendAsync(req, ct);
+            if (!res.IsSuccessStatusCode) return;
+            using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync(ct));
+            if (!doc.RootElement.TryGetProperty("payout", out var payout) || payout.ValueKind == JsonValueKind.Null) return;
+            if (Ets2PayoutService.IsGameRunning()) return;
+
+            var id = payout.GetProperty("id").GetInt64();
+            var amount = payout.GetProperty("amount").GetDecimal();
+            Ets2PayoutApplyResult result;
+            try
+            {
+                result = Ets2PayoutService.Apply(amount);
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    using var fail = BotApiRequest(HttpMethod.Post, $"/api/tracker/payout/{id}/fail");
+                    fail.Content = JsonContent.Create(new { error = ex.Message });
+                    using var _ = await _http.SendAsync(fail, ct);
+                }
+                catch { }
+                return;
+            }
+
+            using var complete = BotApiRequest(HttpMethod.Post, $"/api/tracker/payout/{id}/complete");
+            complete.Content = JsonContent.Create(new { savePath = result.SavePath });
+            using var completeRes = await _http.SendAsync(complete, ct);
+            if (!completeRes.IsSuccessStatusCode) return;
+
+            try
+            {
+                Directory.CreateDirectory(LocalState.Root);
+                File.AppendAllText(Path.Combine(LocalState.Root, "payouts.log"), $"{DateTime.Now:O} payout #{id} £{amount:0.00} applied; ETS2 {result.OldBalance} -> {result.NewBalance}; save={result.SavePath}; backup={result.BackupPath}{Environment.NewLine}");
+            }
+            catch { }
+        }
+        catch { }
+    }
+
     public async Task<(string JobCode, string Status)?> GetLatestJobStatusAsync(CancellationToken ct = default)
     {
         if (!IsAuthenticated) return null;
+        await TryApplyPendingPayoutAsync(ct);
         using var req = Request(HttpMethod.Get, "/api/tracker/jobs");
         using var res = await _http.SendAsync(req, ct);
         if (res.StatusCode == System.Net.HttpStatusCode.Unauthorized) throw new UnauthorizedAccessException("Sterling Tracker login has expired");
