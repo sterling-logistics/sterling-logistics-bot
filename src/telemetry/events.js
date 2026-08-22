@@ -1,6 +1,7 @@
 import {ChannelType,EmbedBuilder,PermissionFlagsBits} from "discord.js";
 
 const PREFERRED_TRACKER_EVENTS_CHANNEL_ID="1537772143683706890";
+const COMPLETED_JOBS_CHANNEL_ID="1537243424707710996";
 const STAFF_CATEGORY_NAME="staff hq";
 const STATUS_CHANNEL_NAME="driver-status";
 const EVENT_CHANNEL_NAME="tracker-events";
@@ -41,7 +42,7 @@ function buildActivityEmbed(driver,event,footer="Sterling Logistics Tracker"){
   const d=event.data||{};let title="🚛 Tracker Event",description=`**${who(driver)}** triggered a tracker event.`,fields=[];
   switch(event.type){
     case "job-started": title="🟢 Job Started";description=`**${who(driver)}** started an ETS2 job.`;fields=[{name:"Cargo",value:d.cargo||"Unknown",inline:true},{name:"Route",value:route(d),inline:false},{name:"Truck",value:d.truck||"Unknown",inline:true}];break;
-    case "job-delivered": title="🟡 Delivery Completed • Awaiting Approval";description=`**${who(driver)}** completed a delivery. Management approval is required before pay and official stats are released.`;fields=[{name:"Cargo",value:d.cargo||"Unknown",inline:true},{name:"Route",value:route(d),inline:false},{name:"Distance",value:`${f((Number(d.distanceKm||d.jobDeliveredDistanceKm)||0)*0.621371)} mi`,inline:true},{name:"Revenue",value:`€${Math.round(Number(d.revenue||d.jobDeliveredRevenue)||0).toLocaleString()}`,inline:true},{name:"Projected Driver Pay",value:`€${Math.round((Number(d.revenue||d.jobDeliveredRevenue)||0)*Number(process.env.DRIVER_PAY_RATE||0.35)).toLocaleString()}`,inline:true},{name:"Damage",value:`${f(Math.max(Number(d.truckDamage)||0,Number(d.trailerDamage)||0,Number(d.cargoDamage)||0)*100)}%`,inline:true},{name:"Status",value:"Pending management verification",inline:false}];break;
+    case "job-delivered": title="🟡 Delivery Completed • Awaiting Approval";description=`**${who(driver)}** completed a delivery. Management approval is required before pay and official stats are released.`;fields=[{name:"Cargo",value:d.cargo||"Unknown",inline:true},{name:"Route",value:route(d),inline:false},{name:"Distance",value:`${f((Number(d.distanceKm||d.jobDeliveredDistanceKm)||0)*0.621371)} mi`,inline:true},{name:"Revenue",value:`€${Math.round(Number(d.revenue||d.jobDeliveredRevenue)||0).toLocaleString()}`,inline:true},{name:"Projected Driver Pay",value:`€${Math.round((Number(d.revenue||d.jobDeliveredRevenue)||0)*Number(process.env.DRIVER_PAY_RATE||0.55)).toLocaleString()}`,inline:true},{name:"Damage",value:`${f(Math.max(Number(d.truckDamage)||0,Number(d.trailerDamage)||0,Number(d.cargoDamage)||0)*100)}%`,inline:true},{name:"Status",value:"Pending management verification",inline:false}];break;
     case "job-cancelled": title="🟠 Job Cancelled";description=`**${who(driver)}** cancelled an ETS2 job.`;fields=[{name:"Cargo",value:d.cargo||"Unknown",inline:true},{name:"Route",value:route(d),inline:false}];break;
     case "fuel-stop": title="⛽ Fuel Stop";description=`**${who(driver)}** refuelled.`;fields=[{name:"Fuel Added",value:`${f(event.fuelAdded)} L`,inline:true},{name:"Fuel Level",value:`${f(d.fuelLiters)} L`,inline:true},{name:"Truck",value:d.truck||"Unknown",inline:true}];break;
     case "fine": title="🚨 Fine Issued";description=`**${who(driver)}** received an in-game fine.`;fields=[{name:"Offence",value:d.fineOffence||"Unknown",inline:true},{name:"Amount",value:`€${Math.round(Number(d.fineAmount)||0).toLocaleString()}`,inline:true},{name:"Speed",value:`${f((Number(d.speedMps)||0)*2.2369362921)} mph`,inline:true}];break;
@@ -88,6 +89,12 @@ export async function postTrackerEvent(client,guildId,driver,event){
     if(TRACKER_EVENTS_VISIBLE.has(event.type)){
       const eventCh=trackerEventsChannelId?await guild.channels.fetch(trackerEventsChannelId).catch(()=>null):setup.events;
       const eventEmbed=buildActivityEmbed(driver,event,"Sterling Logistics Tracker Events");if(eventCh&&eventEmbed)await eventCh.send({embeds:[eventEmbed]});
+    }
+    if(event.type==="job-delivered"){
+      const completedCh=await guild.channels.fetch(COMPLETED_JOBS_CHANNEL_ID).catch(()=>null);
+      const completedEmbed=buildActivityEmbed(driver,event,"Sterling Logistics Completed Jobs");
+      if(completedCh?.isTextBased()&&completedEmbed)await completedCh.send({embeds:[completedEmbed]});
+      else console.warn(`[Tracker Events] Completed-jobs channel ${COMPLETED_JOBS_CHANNEL_ID} is unavailable or not text-based`);
     }
   }catch(err){console.error("[Tracker Events]",err);}
 }
