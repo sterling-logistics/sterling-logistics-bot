@@ -97,10 +97,17 @@ export function registerWebsiteRoutes(app,c){
       if(!s[0]||!code)return res.redirect("/?login=expired");
       await db().execute("DELETE FROM web_oauth_states WHERE state_hash=?",[hash(state)]);
       const redirectUri=`${c.publicBaseUrl}/auth/web/discord/callback`;
-      const form=new URLSearchParams({client_id:c.applicationId,client_secret:c.discordClientSecret,grant_type:"authorization_code",code,redirect_uri:redirectUri});
-      const tokenRes=await fetch("https://discord.com/api/v10/oauth2/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:form});
-      if(!tokenRes.ok)throw new Error("Discord token exchange failed");
-      const oauth=await tokenRes.json();
+      const form=new URLSearchParams({grant_type:"authorization_code",code,redirect_uri:redirectUri});
+      const basic=Buffer.from(`${c.applicationId}:${c.discordClientSecret}`,"utf8").toString("base64");
+      const tokenRes=await fetch("https://discord.com/api/v10/oauth2/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Authorization":`Basic ${basic}`},body:form});
+      const tokenText=await tokenRes.text();
+      if(!tokenRes.ok){
+        let detail=tokenText;
+        try{const j=JSON.parse(tokenText);detail=String(j.error_description||j.message||j.error||tokenText);}catch{}
+        console.error("[Website OAuth Token Exchange]",{status:tokenRes.status,applicationId:c.applicationId,redirectUri,detail});
+        throw new Error(`Discord token exchange failed (${tokenRes.status}): ${detail}`);
+      }
+      const oauth=JSON.parse(tokenText);
       const userRes=await fetch("https://discord.com/api/v10/users/@me",{headers:{Authorization:`Bearer ${oauth.access_token}`}});if(!userRes.ok)throw new Error("Discord identity lookup failed");
       const user=await userRes.json();
       const[d]=await db().execute("SELECT * FROM drivers WHERE discord_id=? AND status<>'left' LIMIT 1",[String(user.id)]);const driver=d[0];
