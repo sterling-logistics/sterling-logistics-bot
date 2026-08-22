@@ -4,7 +4,9 @@ import {ensureEconomySchema} from "../economy/service.js";
 import {processDriverProgression} from "../progression/service.js";
 
 const num=v=>Number(v)||0;
-const payRate=()=>Math.max(0,Math.min(1,Number(process.env.DRIVER_PAY_RATE||0.35)));
+// Sterling drivers receive 55% of approved job revenue by default.
+// DRIVER_PAY_RATE can still override this explicitly if required.
+const payRate=()=>Math.max(0,Math.min(1,Number(process.env.DRIVER_PAY_RATE||0.55)));
 const jobCode=(driverId,sessionCode,data)=>{
   const seed=[driverId,sessionCode,data.sourceCity,data.destinationCity,data.cargo].join("|");
   return `TRK-${crypto.createHash("sha1").update(seed).digest("hex").slice(0,20).toUpperCase()}`;
