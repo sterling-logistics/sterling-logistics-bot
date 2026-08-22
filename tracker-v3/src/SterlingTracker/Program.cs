@@ -1,13 +1,16 @@
+using System.Windows.Forms;
+
 namespace SterlingTracker;
 
 internal static class Program
 {
-    private static int Main()
+    [STAThread]
+    private static void Main()
     {
-        Console.Title = "Sterling Tracker 3.0";
-        Console.WriteLine("Sterling Tracker 3.0.0");
-        Console.WriteLine("Clean bootstrap ready.");
-        Console.WriteLine("Next milestone: direct ETS2 telemetry ingestion.");
-        return 0;
+        ApplicationConfiguration.Initialize();
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (_, e) => MessageBox.Show(e.Exception.Message, "Sterling Tracker", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => MessageBox.Show(e.ExceptionObject?.ToString() ?? "Unknown error", "Sterling Tracker", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        Application.Run(new MainForm());
     }
 }
