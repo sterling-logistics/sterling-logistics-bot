@@ -28,9 +28,9 @@ internal sealed class SterlingApiClient : IDisposable
         return req;
     }
 
-    private HttpRequestMessage BotApiRequest(HttpMethod method, string path)
+    private HttpRequestMessage PayoutApiRequest(HttpMethod method, string path)
     {
-        var req = new HttpRequestMessage(method, TrackerState.LegacyApiBase8101.TrimEnd('/') + path);
+        var req = new HttpRequestMessage(method, TrackerState.PrimaryApiBase.TrimEnd('/') + path);
         if (IsAuthenticated) req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _state.AccessToken);
         return req;
     }
@@ -88,7 +88,7 @@ internal sealed class SterlingApiClient : IDisposable
     {
         await ResolveApiAsync(status, ct);
         status?.Invoke("Starting Discord login…");
-        using var start = new HttpRequestMessage(HttpMethod.Post, TrackerState.PrimaryApiBase.TrimEnd('/') + "/auth/desktop/start") { Content = JsonContent.Create(new { deviceName = $"Sterling Tracker 3.0.4 • {Environment.MachineName}" }) };
+        using var start = new HttpRequestMessage(HttpMethod.Post, TrackerState.PrimaryApiBase.TrimEnd('/') + "/auth/desktop/start") { Content = JsonContent.Create(new { deviceName = $"Sterling Tracker 3.0.5 • {Environment.MachineName}" }) };
         using var startRes = await _http.SendAsync(start, ct);
         var startBody = await startRes.Content.ReadAsStringAsync(ct);
         if (!startRes.IsSuccessStatusCode) throw new InvalidOperationException($"Sterling login service returned {(int)startRes.StatusCode}: {startBody}");
@@ -149,7 +149,7 @@ internal sealed class SterlingApiClient : IDisposable
 
         try
         {
-            using var req = BotApiRequest(HttpMethod.Get, "/api/tracker/payout");
+            using var req = PayoutApiRequest(HttpMethod.Get, "/api/tracker/payout");
             using var res = await _http.SendAsync(req, ct);
             if (!res.IsSuccessStatusCode) return;
             using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync(ct));
@@ -167,7 +167,7 @@ internal sealed class SterlingApiClient : IDisposable
             {
                 try
                 {
-                    using var fail = BotApiRequest(HttpMethod.Post, $"/api/tracker/payout/{id}/fail");
+                    using var fail = PayoutApiRequest(HttpMethod.Post, $"/api/tracker/payout/{id}/fail");
                     fail.Content = JsonContent.Create(new { error = ex.Message });
                     using var _ = await _http.SendAsync(fail, ct);
                 }
@@ -175,7 +175,7 @@ internal sealed class SterlingApiClient : IDisposable
                 return;
             }
 
-            using var complete = BotApiRequest(HttpMethod.Post, $"/api/tracker/payout/{id}/complete");
+            using var complete = PayoutApiRequest(HttpMethod.Post, $"/api/tracker/payout/{id}/complete");
             complete.Content = JsonContent.Create(new { savePath = result.SavePath });
             using var completeRes = await _http.SendAsync(complete, ct);
             if (!completeRes.IsSuccessStatusCode) return;
