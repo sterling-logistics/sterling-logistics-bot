@@ -25,10 +25,11 @@ internal sealed class SterlingApiClient : IDisposable
     {
         var candidates = new[]
         {
-            _state.ApiBase,
             TrackerState.PrimaryApiBase,
-            "http://45.43.163.175:3000",
-            "http://45.43.163.175:8101"
+            _state.ApiBase,
+            TrackerState.LegacyApiBase8101,
+            TrackerState.LegacyApiBase,
+            TrackerState.LegacyWebsiteApiBase
         }
         .Where(x => !string.IsNullOrWhiteSpace(x))
         .Select(x => x.TrimEnd('/'))
