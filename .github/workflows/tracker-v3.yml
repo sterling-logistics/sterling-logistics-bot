@@ -1,0 +1,92 @@
+name: Build Sterling Tracker 3.0
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tracker-v3/**'
+      - '.github/workflows/tracker-v3.yml'
+  pull_request:
+    paths:
+      - 'tracker-v3/**'
+      - '.github/workflows/tracker-v3.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Prepare pinned telemetry client
+        shell: pwsh
+        run: .\tracker-v3\scripts\setup-rencloud.ps1
+
+      - name: Restore
+        shell: pwsh
+        run: dotnet restore .\tracker-v3\src\SterlingTracker\SterlingTracker.csproj -r win-x64
+
+      - name: Publish Tracker 3.0
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          dotnet publish .\tracker-v3\src\SterlingTracker\SterlingTracker.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            --no-restore `
+            -p:PublishSingleFile=true `
+            -p:PublishTrimmed=false `
+            -p:DebugType=None `
+            -p:DebugSymbols=false `
+            -o .\tracker-v3\publish\SterlingTracker
+          if($LASTEXITCODE -ne 0){throw 'dotnet publish failed'}
+          if(-not (Test-Path '.\tracker-v3\publish\SterlingTracker\SterlingTracker.exe')){throw 'SterlingTracker.exe was not produced'}
+
+      - name: Download pinned ETS2 telemetry plugin
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $temp=Join-Path $env:RUNNER_TEMP 'sterling-telemetry-plugin'
+          $zip=Join-Path $temp 'plugin.zip'
+          $extract=Join-Path $temp 'plugin'
+          $dest='.\tracker-v3\build-assets'
+          New-Item -ItemType Directory -Force -Path $temp,$extract,$dest | Out-Null
+          Invoke-WebRequest 'https://github.com/RenCloud/scs-sdk-plugin/releases/download/V.1.12.1/release_v_1_12_1.zip' -OutFile $zip
+          Expand-Archive $zip -DestinationPath $extract -Force
+          $plugin=Get-ChildItem $extract -Filter 'scs-telemetry.dll' -Recurse | Where-Object {$_.FullName -match 'Win64|win_x64|x64'} | Select-Object -First 1
+          if(-not $plugin){throw 'Pinned x64 scs-telemetry.dll was not found'}
+          Copy-Item $plugin.FullName (Join-Path $dest 'scs-telemetry.dll') -Force
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Force -Path .\tracker-v3\dist | Out-Null
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' .\tracker-v3\installer\SterlingTrackerV3.iss
+          if($LASTEXITCODE -ne 0){throw 'Inno Setup failed'}
+          $installer='.\tracker-v3\dist\SterlingTracker-3.0.0-Setup.exe'
+          if(-not (Test-Path $installer)){throw 'Sterling Tracker installer was not created'}
+          if((Get-Item $installer).Length -lt 1000000){throw 'Installer is unexpectedly small'}
+          Get-FileHash $installer -Algorithm SHA256 | Format-List
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DOWNLOAD-Sterling-Tracker-3.0.0
+          path: tracker-v3/dist/SterlingTracker-3.0.0-Setup.exe
+          if-no-files-found: error
+          retention-days: 30
