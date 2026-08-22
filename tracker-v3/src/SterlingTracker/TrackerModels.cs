@@ -62,7 +62,9 @@ internal sealed class DriverProfile
 
 internal sealed class TrackerState
 {
-    public string ApiBase { get; set; } = "http://45.43.163.175:3000";
+    public const string PrimaryApiBase = "https://sterlinglogisticsvtc.co.uk";
+    public const string LegacyApiBase = "http://45.43.163.175:3000";
+    public string ApiBase { get; set; } = PrimaryApiBase;
     public string SessionCode { get; set; } = $"trk3-{Guid.NewGuid():N}";
     public string? AccessToken { get; set; }
 }
