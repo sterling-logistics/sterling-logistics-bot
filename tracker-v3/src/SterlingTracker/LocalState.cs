@@ -16,7 +16,15 @@ internal static class LocalState
             if (!File.Exists(StatePath)) return NewState();
             var state = JsonSerializer.Deserialize<TrackerState>(File.ReadAllText(StatePath), JsonOptions) ?? NewState();
             var envApi = Environment.GetEnvironmentVariable("STERLING_TRACKER_API");
-            if (!string.IsNullOrWhiteSpace(envApi)) state.ApiBase = envApi.TrimEnd('/');
+            if (!string.IsNullOrWhiteSpace(envApi))
+            {
+                state.ApiBase = envApi.TrimEnd('/');
+            }
+            else if (string.IsNullOrWhiteSpace(state.ApiBase) || string.Equals(state.ApiBase.TrimEnd('/'), TrackerState.LegacyApiBase, StringComparison.OrdinalIgnoreCase))
+            {
+                state.ApiBase = TrackerState.PrimaryApiBase;
+                Save(state);
+            }
             if (string.IsNullOrWhiteSpace(state.SessionCode)) state.SessionCode = $"trk3-{Guid.NewGuid():N}";
             return state;
         }
