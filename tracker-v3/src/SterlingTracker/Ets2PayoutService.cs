@@ -10,29 +10,71 @@ internal static class Ets2PayoutService
 {
     public static bool IsGameRunning() => Process.GetProcessesByName("eurotrucks2").Length > 0;
 
+    private static IReadOnlyList<string> CandidateEts2Roots()
+    {
+        var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void AddDocumentsRoot(string? documents)
+        {
+            if (string.IsNullOrWhiteSpace(documents)) return;
+            try { roots.Add(Path.Combine(documents, "Euro Truck Simulator 2")); } catch { }
+        }
+
+        AddDocumentsRoot(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
+
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        AddDocumentsRoot(Path.Combine(userProfile, "Documents"));
+
+        var oneDriveVars = new[] { "OneDrive", "OneDriveConsumer", "OneDriveCommercial" };
+        foreach (var name in oneDriveVars)
+        {
+            var value = Environment.GetEnvironmentVariable(name);
+            if (!string.IsNullOrWhiteSpace(value)) AddDocumentsRoot(Path.Combine(value, "Documents"));
+        }
+
+        try
+        {
+            foreach (var oneDrive in Directory.EnumerateDirectories(userProfile, "OneDrive*", SearchOption.TopDirectoryOnly))
+                AddDocumentsRoot(Path.Combine(oneDrive, "Documents"));
+        }
+        catch { }
+
+        return roots.ToList();
+    }
+
     public static IReadOnlyList<FileInfo> FindSaves()
     {
-        var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-        var ets2 = Path.Combine(docs, "Euro Truck Simulator 2");
-        var roots = new[] { Path.Combine(ets2, "steam_profiles"), Path.Combine(ets2, "profiles") };
         var saves = new List<FileInfo>();
-        foreach (var root in roots)
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var ets2 in CandidateEts2Roots())
         {
-            if (!Directory.Exists(root)) continue;
-            try
+            var roots = new[] { Path.Combine(ets2, "steam_profiles"), Path.Combine(ets2, "profiles") };
+            foreach (var root in roots)
             {
-                saves.AddRange(Directory.EnumerateFiles(root, "game.sii", SearchOption.AllDirectories)
-                    .Select(x => new FileInfo(x))
-                    .Where(x => x.Exists));
+                if (!Directory.Exists(root)) continue;
+                try
+                {
+                    foreach (var path in Directory.EnumerateFiles(root, "game.sii", SearchOption.AllDirectories))
+                    {
+                        if (seen.Add(path))
+                        {
+                            var file = new FileInfo(path);
+                            if (file.Exists) saves.Add(file);
+                        }
+                    }
+                }
+                catch { }
             }
-            catch { }
         }
+
         return saves.OrderByDescending(x => x.LastWriteTimeUtc).ToList();
     }
 
     public static Ets2PayoutApplyResult Apply(decimal amount)
     {
-        var save = FindSaves().FirstOrDefault() ?? throw new InvalidOperationException("No ETS2 game.sii save was found in Documents\\Euro Truck Simulator 2\\profiles or steam_profiles.");
+        var save = FindSaves().FirstOrDefault() ?? throw new InvalidOperationException(
+            "No ETS2 game.sii save was found. Sterling checked normal Documents plus OneDrive/redirected Documents folders. Open ETS2, load your TruckersMP profile, make a manual save, close ETS2 fully, then try again.");
         return ApplyToSave(amount, save.FullName);
     }
 
@@ -50,8 +92,8 @@ internal static class Ets2PayoutService
         var text = Encoding.UTF8.GetString(bytes);
         if (!Regex.IsMatch(text, @"\bmoney_account\s*:", RegexOptions.IgnoreCase))
         {
-            EnsureTextSaveFormat();
-            throw new InvalidOperationException("This save is still encrypted. Sterling has set g_save_format to 2. Start normal ETS2, load THIS profile, create a new manual save, exit ETS2 fully, then click Apply payout again and select that new save's game.sii.");
+            EnsureTextSaveFormatFor(save.FullName);
+            throw new InvalidOperationException("This save is still encrypted. Sterling has set g_save_format to 2 for the detected ETS2 folder. Start normal ETS2, load THIS profile, create a new manual save, exit ETS2 fully, then click Apply payout again and select that new save's game.sii.");
         }
 
         var lines = File.ReadAllLines(save.FullName);
@@ -86,24 +128,40 @@ internal static class Ets2PayoutService
 
     public static string GetEts2Root()
     {
-        var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-        return Path.Combine(docs, "Euro Truck Simulator 2");
+        return CandidateEts2Roots().FirstOrDefault(Directory.Exists)
+            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Euro Truck Simulator 2");
+    }
+
+    private static void EnsureTextSaveFormatFor(string savePath)
+    {
+        try
+        {
+            var dir = new DirectoryInfo(Path.GetDirectoryName(savePath)!);
+            DirectoryInfo? ets2 = dir;
+            while (ets2 is not null && !ets2.Name.Equals("Euro Truck Simulator 2", StringComparison.OrdinalIgnoreCase)) ets2 = ets2.Parent;
+            var config = Path.Combine((ets2?.FullName ?? GetEts2Root()), "config.cfg");
+            SetTextSaveFormat(config);
+        }
+        catch { EnsureTextSaveFormat(); }
     }
 
     private static void EnsureTextSaveFormat()
     {
-        try
+        foreach (var root in CandidateEts2Roots())
         {
-            var config = Path.Combine(GetEts2Root(), "config.cfg");
-            if (!File.Exists(config)) return;
-            var text = File.ReadAllText(config);
-            const string pattern = "uset\\s+g_save_format\\s+\"[^\"]*\"";
-            if (Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase))
-                text = Regex.Replace(text, pattern, "uset g_save_format \"2\"", RegexOptions.IgnoreCase);
-            else
-                text += Environment.NewLine + "uset g_save_format \"2\"" + Environment.NewLine;
-            File.WriteAllText(config, text, new UTF8Encoding(false));
+            try { SetTextSaveFormat(Path.Combine(root, "config.cfg")); } catch { }
         }
-        catch { }
+    }
+
+    private static void SetTextSaveFormat(string config)
+    {
+        if (!File.Exists(config)) return;
+        var text = File.ReadAllText(config);
+        const string pattern = "uset\\s+g_save_format\\s+\"[^\"]*\"";
+        if (Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase))
+            text = Regex.Replace(text, pattern, "uset g_save_format \"2\"", RegexOptions.IgnoreCase);
+        else
+            text += Environment.NewLine + "uset g_save_format \"2\"" + Environment.NewLine;
+        File.WriteAllText(config, text, new UTF8Encoding(false));
     }
 }
