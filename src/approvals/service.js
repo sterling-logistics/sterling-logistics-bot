@@ -78,6 +78,7 @@ export async function reviewTrackedApproval(code,decision,reviewer,notes){
   if(!["approve","decline"].includes(decision))throw new Error("Invalid approval decision.");
   const conn=await db().getConnection();
   let result=null;
+  let payoutId=null;
   try{
     await conn.beginTransaction();
     const[rows]=await conn.execute(`SELECT a.*,d.discord_id,d.sterling_driver_id FROM tracked_job_approvals a JOIN drivers d ON d.id=a.driver_id WHERE a.approval_code=? LIMIT 1 FOR UPDATE`,[String(code).toUpperCase()]);
@@ -91,6 +92,18 @@ export async function reviewTrackedApproval(code,decision,reviewer,notes){
       if(num(a.driver_payment)>0)await conn.execute("INSERT INTO economy_transactions(driver_id,type,amount,category,reference_key,details_json) VALUES(?,?,?,?,?,?)",[a.driver_id,"expense",a.driver_payment,"driver_payment",payKey,JSON.stringify({approvalId:a.id,jobCode:a.job_code,rate:payRate()})]);
       await conn.execute(`INSERT INTO driver_wallets(driver_id,balance,total_earned,paid_jobs) VALUES(?,?,?,1)
         ON DUPLICATE KEY UPDATE balance=balance+VALUES(balance),total_earned=total_earned+VALUES(total_earned),paid_jobs=paid_jobs+1`,[a.driver_id,a.driver_payment,a.driver_payment]);
+
+      // Approved driver pay is transferred to ETS2 automatically. The Tracker
+      // will apply this payout to the linked ETS2/TMP profile as soon as it can
+      // safely write the save, without the driver needing /withdraw.
+      const payoutAmount=Math.round(Math.max(0,num(a.driver_payment))*100)/100;
+      if(payoutAmount>0){
+        const[payout]=await conn.execute("INSERT INTO ets2_payouts(driver_id,amount,status) VALUES(?,?,'pending')",[a.driver_id,payoutAmount]);
+        payoutId=payout.insertId;
+        await conn.execute("UPDATE driver_wallets SET balance=GREATEST(0,balance-?) WHERE driver_id=?",[payoutAmount,a.driver_id]);
+        await conn.execute("INSERT INTO economy_transactions(driver_id,type,amount,category,reference_key,details_json) VALUES(?,?,?,?,?,?)",[a.driver_id,"transfer",payoutAmount,"ets2_auto_payout",`tracked-approval:${a.id}:auto-ets2`,JSON.stringify({approvalId:a.id,jobCode:a.job_code,payoutId})]);
+      }
+
       await conn.execute("UPDATE drivers SET total_miles=total_miles+?,monthly_miles=monthly_miles+?,jobs_completed=jobs_completed+1,total_income=total_income+? WHERE id=?",[a.distance_miles,a.distance_miles,a.revenue,a.driver_id]);
       if(a.job_code)await conn.execute("UPDATE jobs SET status='completed',completed_at=COALESCE(completed_at,NOW()) WHERE job_code=? AND driver_id=?",[a.job_code,a.driver_id]);
       await conn.execute("UPDATE tracked_job_approvals SET status='approved',reviewed_by=?,review_notes=?,reviewed_at=NOW() WHERE id=?",[reviewer,notes||null,a.id]);
@@ -99,7 +112,7 @@ export async function reviewTrackedApproval(code,decision,reviewer,notes){
       await conn.execute("UPDATE tracked_job_approvals SET status='declined',reviewed_by=?,review_notes=?,reviewed_at=NOW() WHERE id=?",[reviewer,notes||null,a.id]);
     }
     await conn.commit();
-    result={...a,status:decision==="approve"?"approved":"declined"};
+    result={...a,status:decision==="approve"?"approved":"declined",payoutId};
   }catch(e){await conn.rollback();throw e;}finally{conn.release();}
   if(decision==="approve"){try{result.progression=await processDriverProgression(result.driver_id);}catch(e){console.error("[Job Approval Progression]",e);}}
   return result;
