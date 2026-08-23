@@ -2,12 +2,17 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
 
 namespace SterlingTracker;
 
 internal sealed record Ets2PayoutApplyResult(long OldBalance, long NewBalance, string SavePath, string BackupPath);
+internal sealed class PayoutSyncPendingException : Exception
+{
+    public PayoutSyncPendingException(string message) : base(message) { }
+}
 
 internal static class Ets2PayoutService
 {
@@ -15,7 +20,20 @@ internal static class Ets2PayoutService
     private const string AtsAppId = "270880";
     private static readonly byte[] ScsKey = Convert.FromHexString("2A5FCB1791D22FB60245B3D8369ED0B2C27371563FBF1F3C9EDF6B11825A5D0A");
 
-    public static bool IsGameRunning() =>
+    private sealed class LiveSyncMarker
+    {
+        public decimal Amount { get; set; }
+        public long BaseBalance { get; set; }
+        public long TargetBalance { get; set; }
+        public string BackupPath { get; set; } = "";
+        public string LastSavePath { get; set; } = "";
+        public DateTime LastStagedWriteUtc { get; set; }
+        public DateTime CreatedUtc { get; set; }
+    }
+
+    public static bool IsGameRunning() => IsSimulatorProcessRunning();
+
+    private static bool IsSimulatorProcessRunning() =>
         Process.GetProcessesByName("eurotrucks2").Length > 0 ||
         Process.GetProcessesByName("amtrucks").Length > 0;
 
@@ -108,9 +126,7 @@ internal static class Ets2PayoutService
                 foreach (var userDir in Directory.EnumerateDirectories(userdata))
                 {
                     foreach (var appId in new[] { Ets2AppId, AtsAppId })
-                    {
                         roots.Add(Path.Combine(userDir, appId, "remote", "profiles"));
-                    }
                 }
             }
             catch { }
@@ -183,44 +199,175 @@ internal static class Ets2PayoutService
     public static Ets2PayoutApplyResult ApplyToSave(decimal amount, string savePath)
     {
         if (amount <= 0) throw new InvalidOperationException("Game payout amount must be greater than zero.");
-        if (IsGameRunning()) throw new InvalidOperationException("Close ETS2/ATS and TruckersMP completely before applying the payout.");
         if (string.IsNullOrWhiteSpace(savePath) || !File.Exists(savePath)) throw new InvalidOperationException("The selected game.sii save does not exist.");
         if (!Path.GetFileName(savePath).Equals("game.sii", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Select the game.sii file inside the save you actually load.");
 
         var save = new FileInfo(savePath);
-        if ((DateTime.Now - save.LastWriteTime).TotalSeconds < 3) throw new InvalidOperationException("The save is still being written. Wait a few seconds and try again.");
+        EnsureSaveStable(save);
 
-        var originalBytes = File.ReadAllBytes(save.FullName);
+        var originalBytes = ReadStableBytes(save.FullName);
         var text = DecodeSaveToText(originalBytes);
-        if (!Regex.IsMatch(text, @"\bmoney_account\s*:", RegexOptions.IgnoreCase))
-            throw new InvalidOperationException("Sterling decoded the save but could not locate money_account. Please select the game.sii from the exact profile/save you load.");
-
         var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
         var moneyLine = new Regex(@"^(\s*)money_account\s*:\s*(-?\d+)\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
         var idx = Array.FindIndex(lines, line => moneyLine.IsMatch(line));
-        if (idx < 0) throw new InvalidOperationException("Could not locate money_account in the decoded save.");
+        if (idx < 0) throw new InvalidOperationException("Sterling decoded the save but could not locate money_account in this profile.");
 
         var match = moneyLine.Match(lines[idx]);
-        var oldBalance = long.Parse(match.Groups[2].Value);
+        var currentBalance = long.Parse(match.Groups[2].Value);
         var add = checked((long)Math.Truncate(amount));
-        var newBalance = checked(oldBalance + add);
-        if (newBalance < 0) throw new InvalidOperationException("The resulting game balance would be invalid.");
+        if (add <= 0) throw new InvalidOperationException("The payout is too small to apply to the game balance.");
 
-        var backup = save.FullName + ".sterling-backup-" + DateTime.Now.ToString("yyyyMMdd-HHmmss");
-        File.Copy(save.FullName, backup, true);
-        lines[idx] = $"{match.Groups[1].Value}money_account: {newBalance}";
-        var output = string.Join(Environment.NewLine, lines);
-        File.WriteAllText(save.FullName, output, new UTF8Encoding(false));
-
-        var verify = File.ReadAllText(save.FullName);
-        if (!Regex.IsMatch(verify, $@"\bmoney_account\s*:\s*{newBalance}\b", RegexOptions.IgnoreCase))
+        var running = IsSimulatorProcessRunning();
+        var profileRoot = GetProfileRootForSave(save.FullName) ?? save.DirectoryName ?? Path.GetDirectoryName(save.FullName)!;
+        var markerPath = Path.Combine(profileRoot, ".sterling-live-sync.json");
+        var marker = LoadMarker(markerPath);
+        if (marker is not null && (DateTime.UtcNow - marker.CreatedUtc) > TimeSpan.FromDays(2))
         {
-            File.Copy(backup, save.FullName, true);
-            throw new InvalidOperationException("Sterling could not verify the new balance, so the original save was restored from backup.");
+            TryDelete(markerPath);
+            marker = null;
+        }
+        if (marker is not null && Math.Abs(marker.Amount - amount) > 0.005m)
+        {
+            TryDelete(markerPath);
+            marker = null;
         }
 
+        if (marker is not null)
+        {
+            if (!running)
+            {
+                var finalTarget = currentBalance == marker.TargetBalance ? marker.TargetBalance : checked(currentBalance + add);
+                var backup = EnsureBackup(save.FullName, marker.BackupPath);
+                WriteBalance(save, lines, idx, match.Groups[1].Value, finalTarget);
+                EnsureTextSaveFormatFor(save.FullName);
+                TryDelete(markerPath);
+                return new Ets2PayoutApplyResult(finalTarget - add, finalTarget, save.FullName, backup);
+            }
+
+            var gameWroteAfterStage = save.LastWriteTimeUtc > marker.LastStagedWriteUtc.AddMilliseconds(750);
+            if (gameWroteAfterStage && currentBalance >= marker.TargetBalance)
+            {
+                EnsureTextSaveFormatFor(save.FullName);
+                TryDelete(markerPath);
+                return new Ets2PayoutApplyResult(marker.TargetBalance - add, currentBalance, save.FullName, marker.BackupPath);
+            }
+
+            if (gameWroteAfterStage && currentBalance != marker.TargetBalance)
+            {
+                var delta = checked(currentBalance - marker.BaseBalance);
+                marker.BaseBalance = currentBalance;
+                marker.TargetBalance = checked(marker.TargetBalance + delta);
+            }
+
+            if (currentBalance != marker.TargetBalance || !string.Equals(save.FullName, marker.LastSavePath, StringComparison.OrdinalIgnoreCase))
+            {
+                WriteBalance(save, lines, idx, match.Groups[1].Value, marker.TargetBalance);
+                save.Refresh();
+                marker.LastSavePath = save.FullName;
+                marker.LastStagedWriteUtc = save.LastWriteTimeUtc;
+                SaveMarker(markerPath, marker);
+            }
+
+            throw new PayoutSyncPendingException(
+                "Sterling has staged this payout while the game is open. Keep Tracker running; it will confirm the payment automatically at the next safe save/reload point. You do not need to close ETS2/ATS or TruckersMP.");
+        }
+
+        var target = checked(currentBalance + add);
+        if (target < 0) throw new InvalidOperationException("The resulting game balance would be invalid.");
+        var backupPath = EnsureBackup(save.FullName, null);
+        WriteBalance(save, lines, idx, match.Groups[1].Value, target);
         EnsureTextSaveFormatFor(save.FullName);
-        return new Ets2PayoutApplyResult(oldBalance, newBalance, save.FullName, backup);
+
+        if (!running)
+            return new Ets2PayoutApplyResult(currentBalance, target, save.FullName, backupPath);
+
+        save.Refresh();
+        var newMarker = new LiveSyncMarker
+        {
+            Amount = amount,
+            BaseBalance = currentBalance,
+            TargetBalance = target,
+            BackupPath = backupPath,
+            LastSavePath = save.FullName,
+            LastStagedWriteUtc = save.LastWriteTimeUtc,
+            CreatedUtc = DateTime.UtcNow
+        };
+        SaveMarker(markerPath, newMarker);
+        throw new PayoutSyncPendingException(
+            "Sterling has staged this payout while the game is open. Keep Tracker running; it will confirm the payment automatically at the next safe save/reload point. You do not need to close ETS2/ATS or TruckersMP.");
+    }
+
+    private static byte[] ReadStableBytes(string path)
+    {
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var ms = new MemoryStream();
+            stream.CopyTo(ms);
+            return ms.ToArray();
+        }
+        catch (IOException ex)
+        {
+            throw new PayoutSyncPendingException("The game is writing its save right now. Sterling will retry automatically in a few seconds. " + ex.Message);
+        }
+    }
+
+    private static void EnsureSaveStable(FileInfo save)
+    {
+        save.Refresh();
+        var write = save.LastWriteTimeUtc;
+        var length = save.Length;
+        Thread.Sleep(650);
+        save.Refresh();
+        if (save.LastWriteTimeUtc != write || save.Length != length)
+            throw new PayoutSyncPendingException("The game is saving right now. Sterling will retry automatically in a few seconds.");
+    }
+
+    private static string EnsureBackup(string savePath, string? existing)
+    {
+        if (!string.IsNullOrWhiteSpace(existing) && File.Exists(existing)) return existing;
+        var backup = savePath + ".sterling-backup-" + DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        File.Copy(savePath, backup, true);
+        return backup;
+    }
+
+    private static void WriteBalance(FileInfo save, string[] sourceLines, int idx, string indent, long target)
+    {
+        var lines = (string[])sourceLines.Clone();
+        lines[idx] = $"{indent}money_account: {target}";
+        var output = string.Join(Environment.NewLine, lines);
+        var temp = save.FullName + ".sterling-write";
+        try
+        {
+            File.WriteAllText(temp, output, new UTF8Encoding(false));
+            File.Move(temp, save.FullName, true);
+        }
+        catch (IOException ex)
+        {
+            TryDelete(temp);
+            throw new PayoutSyncPendingException("The game touched the save during Sterling sync. Tracker will retry automatically. " + ex.Message);
+        }
+
+        var verify = File.ReadAllText(save.FullName);
+        if (!Regex.IsMatch(verify, $@"\bmoney_account\s*:\s*{target}\b", RegexOptions.IgnoreCase))
+            throw new InvalidOperationException("Sterling could not verify the staged game balance.");
+    }
+
+    private static LiveSyncMarker? LoadMarker(string path)
+    {
+        try { return File.Exists(path) ? JsonSerializer.Deserialize<LiveSyncMarker>(File.ReadAllText(path)) : null; }
+        catch { return null; }
+    }
+
+    private static void SaveMarker(string path, LiveSyncMarker marker)
+    {
+        try { File.WriteAllText(path, JsonSerializer.Serialize(marker), new UTF8Encoding(false)); }
+        catch (Exception ex) { throw new InvalidOperationException("Sterling could not save its live payout state: " + ex.Message, ex); }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try { if (File.Exists(path)) File.Delete(path); } catch { }
     }
 
     private static string DecodeSaveToText(byte[] bytes)
@@ -263,9 +410,6 @@ internal static class Ets2PayoutService
 
     private static void EnsureTextSaveFormatFor(string savePath)
     {
-        // Steam Cloud saves live under Steam\userdata, but g_save_format is still stored
-        // in the game's Documents config. Set every detected ETS2/ATS config so the next
-        // save remains plaintext after Sterling has converted this one.
         foreach (var root in CandidateGameRoots())
         {
             try { SetTextSaveFormat(Path.Combine(root, "config.cfg")); } catch { }
