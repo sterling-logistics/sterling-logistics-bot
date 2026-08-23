@@ -22,33 +22,44 @@ internal sealed class TelemetryService : IDisposable
     {
         if (_telemetry is { Error: not null }) { _telemetry.Dispose(); _telemetry = null; }
         if (_telemetry is not null) return;
-        try { _telemetry = new SCSSdkTelemetry(200); if (_telemetry.Error is not null) { StatusChanged?.Invoke("Waiting for ETS2 telemetry shared memory"); return; } _telemetry.Data += OnData; StatusChanged?.Invoke("Telemetry client connected; start ETS2"); }
+        try { _telemetry = new SCSSdkTelemetry(200); if (_telemetry.Error is not null) { StatusChanged?.Invoke("Waiting for ETS2 telemetry shared memory"); return; } _telemetry.Data += OnData; StatusChanged?.Invoke("Telemetry client connected; start ETS2 / ATS"); }
         catch (Exception ex) { StatusChanged?.Invoke("Telemetry unavailable: " + ex.Message); }
     }
 
     private void OnData(SCSTelemetry data, bool changed)
     {
         if (!changed) return;
-        var truck=data.TruckValues; var current=truck.CurrentValues; var dash=current.DashboardValues; var job=data.JobValues; var delivered=data.GamePlay?.JobDelivered;
+        var truck=data.TruckValues; var current=truck.CurrentValues; var dash=current.DashboardValues; var job=data.JobValues; var delivered=data.GamePlay?.JobDelivered; var s=data.SpecialEventsValues;
         var trailerDamage=ReadNumber(data,"TrailerValues.0.DamageValues.Wear","TrailerValues.0.DamageValues.Chassis","TrailerValues.0.Damage");
         var truckDamage=Max(ReadNumber(current,"DamageValues.Engine"),ReadNumber(current,"DamageValues.Transmission"),ReadNumber(current,"DamageValues.Cabin"),ReadNumber(current,"DamageValues.Chassis"),ReadNumber(current,"DamageValues.Wheels"));
         var snapshot=new TelemetrySnapshot {
             SdkActive=data.SdkActive,Paused=data.Paused,Game=data.Game.ToString(),Truck=string.Join(" ",new[]{truck.ConstantsValues.Brand,truck.ConstantsValues.Name}.Where(x=>!string.IsNullOrWhiteSpace(x))),
             SpeedMps=Math.Abs(dash.Speed.Value),EngineRpm=dash.RPM,EngineOn=current.EngineEnabled,FuelLiters=dash.FuelValue.Amount,FuelCapacityLiters=truck.ConstantsValues.CapacityValues.Fuel,OdometerKm=dash.Odometer,
             Cargo=job.CargoValues.Name??"",SourceCity=job.CitySource??"",DestinationCity=job.CityDestination??"",PlannedDistanceKm=job.PlannedDistanceKm,Revenue=job.Income,
-            TruckDamage=truckDamage,TrailerDamage=trailerDamage,CargoDamage=job.CargoValues.CargoDamage,JobDeliveredDistanceKm=delivered?.DistanceKm??0,JobDeliveredRevenue=delivered?.Revenue??0,OnJob=data.SpecialEventsValues.OnJob };
+            TruckDamage=truckDamage,TrailerDamage=trailerDamage,CargoDamage=job.CargoValues.CargoDamage,JobDeliveredDistanceKm=delivered?.DistanceKm??0,JobDeliveredRevenue=delivered?.Revenue??0,OnJob=s.OnJob };
 
-        // ETS2 clears JobValues as delivery completes. Keep the last populated job snapshot
-        // and merge its cargo/route into the delivery event before it is sent to Sterling.
+        // Keep the last populated job snapshot because ETS2/ATS clears JobValues around delivery.
         if (snapshot.OnJob && HasJobMetadata(snapshot)) _activeJob=snapshot;
-        if (data.SpecialEventsValues.JobDelivered && _activeJob is not null) snapshot=MergeJob(snapshot,_activeJob);
+
+        // Some game/TMP combinations briefly miss the JobDelivered special-event rising edge.
+        // If OnJob falls and the SDK delivery payload already contains distance/revenue, treat
+        // that as a completed job instead of leaving it stuck "in progress" forever.
+        var fallbackDelivered = _onJob && !s.OnJob && !s.JobDelivered && !s.JobCancelled && _activeJob is not null &&
+            ((delivered?.DistanceKm ?? 0) > 0 || (delivered?.Revenue ?? 0) > 0);
+
+        if ((s.JobDelivered || fallbackDelivered) && _activeJob is not null) snapshot=MergeJob(snapshot,_activeJob);
 
         lock(_gate)_latest=snapshot; SnapshotChanged?.Invoke(snapshot);
-        StatusChanged?.Invoke(snapshot.SdkActive?(snapshot.Paused?"ETS2 connected • paused":"ETS2 connected • live"):"ETS2 telemetry inactive");
-        var s=data.SpecialEventsValues;
-        Rising(s.OnJob,ref _onJob,"job-started",snapshot); Rising(s.JobDelivered,ref _delivered,"job-delivered",snapshot); Rising(s.JobCancelled,ref _cancelled,"job-cancelled",snapshot);
+        var gameName = snapshot.Game.Contains("American",StringComparison.OrdinalIgnoreCase) || snapshot.Game.Contains("ATS",StringComparison.OrdinalIgnoreCase) ? "ATS" : "ETS2";
+        StatusChanged?.Invoke(snapshot.SdkActive?(snapshot.Paused?$"{gameName} connected • paused":$"{gameName} connected • live"):$"{gameName} telemetry inactive");
+
+        Rising(s.OnJob,ref _onJob,"job-started",snapshot);
+        Rising(s.JobDelivered,ref _delivered,"job-delivered",snapshot);
+        if (fallbackDelivered && !s.JobDelivered) TrackerEvent?.Invoke("job-delivered",snapshot);
+        Rising(s.JobCancelled,ref _cancelled,"job-cancelled",snapshot);
         Rising(s.Fined,ref _fined,"fine",snapshot); Rising(s.Tollgate,ref _toll,"toll",snapshot); Rising(s.Ferry,ref _ferry,"ferry",snapshot); Rising(s.Train,ref _train,"train",snapshot);
-        if(!s.OnJob&&!s.JobDelivered&&_activeJob is not null)_activeJob=null;
+        if(!s.OnJob&&!s.JobDelivered&&!fallbackDelivered&&_activeJob is not null)_activeJob=null;
+        if(s.JobDelivered||fallbackDelivered||s.JobCancelled)_activeJob=null;
     }
 
     private void Rising(bool value,ref bool previous,string eventType,TelemetrySnapshot snapshot){if(value&&!previous)TrackerEvent?.Invoke(eventType,snapshot);previous=value;}
