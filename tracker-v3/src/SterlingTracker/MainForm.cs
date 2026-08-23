@@ -25,21 +25,22 @@ internal sealed class MainForm : Form
     private readonly TextBox _log = new() { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, BackColor = Color.FromArgb(9, 18, 31), ForeColor = Color.Gainsboro, BorderStyle = BorderStyle.FixedSingle };
     private readonly Button _signIn = Button("Sign in with Discord");
     private readonly Button _signOut = Button("Sign out");
-    private readonly Button _installPlugin = Button("Install ETS2 telemetry");
-    private readonly Button _applyPayout = Button("Apply / link ETS2 payout profile");
+    private readonly Button _installPlugin = Button("Install ETS2 / ATS telemetry");
+    private readonly Button _applyPayout = Button("Link / sync game payout profile");
 
     private DriverProfile? _profile;
     private DateTime _lastHeartbeat = DateTime.MinValue;
     private DateTime _lastJobStatusCheck = DateTime.MinValue;
     private DateTime _lastPayoutCheck = DateTime.MinValue;
     private string _lastJobStatusKey = "";
+    private string _lastPayoutWaitMessage = "";
     private int _sending;
     private int _payoutApplying;
 
     public MainForm()
     {
         _api = new SterlingApiClient(_state);
-        Text = "Sterling Tracker 3.0.8";
+        Text = "Sterling Tracker 3.0.10";
         MinimumSize = new Size(920, 680);
         Size = new Size(1080, 790);
         StartPosition = FormStartPosition.CenterScreen;
@@ -48,8 +49,8 @@ internal sealed class MainForm : Form
         Font = new Font("Segoe UI", 10f);
 
         var header = new Panel { Dock = DockStyle.Top, Height = 82, Padding = new Padding(22, 14, 22, 8) };
-        var title = new Label { Text = "STERLING TRACKER 3.0.8", AutoSize = true, Font = new Font("Segoe UI Semibold", 22f, FontStyle.Bold), ForeColor = Color.FromArgb(76, 169, 255), Location = new Point(20, 14) };
-        var subtitle = new Label { Text = "Discord-linked ETS2/TMP telemetry • automatic Sterling payouts", AutoSize = true, ForeColor = Color.FromArgb(174, 193, 214), Location = new Point(23, 52) };
+        var title = new Label { Text = "STERLING TRACKER 3.0.10", AutoSize = true, Font = new Font("Segoe UI Semibold", 22f, FontStyle.Bold), ForeColor = Color.FromArgb(76, 169, 255), Location = new Point(20, 14) };
+        var subtitle = new Label { Text = "Discord-linked ETS2 / ATS / TMP telemetry • live-safe automatic payouts", AutoSize = true, ForeColor = Color.FromArgb(174, 193, 214), Location = new Point(23, 52) };
         header.Controls.Add(title); header.Controls.Add(subtitle);
 
         var body = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(20), ColumnCount = 2, RowCount = 2 };
@@ -67,7 +68,7 @@ internal sealed class MainForm : Form
         var connection = Card("CONNECTION");
         var connGrid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 8, Padding = new Padding(16, 42, 16, 12) };
         connGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 36)); connGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 64));
-        AddRow(connGrid, 0, "Driver", _driver); AddRow(connGrid, 1, "Sterling API", _apiStatus); AddRow(connGrid, 2, "ETS2", _ets2Status); AddRow(connGrid, 3, "Driver stats", _stats);
+        AddRow(connGrid, 0, "Driver", _driver); AddRow(connGrid, 1, "Sterling API", _apiStatus); AddRow(connGrid, 2, "Game", _ets2Status); AddRow(connGrid, 3, "Driver stats", _stats);
         connGrid.Controls.Add(_signIn, 0, 4); connGrid.SetColumnSpan(_signIn, 2);
         connGrid.Controls.Add(_signOut, 0, 5); connGrid.SetColumnSpan(_signOut, 2);
         connGrid.Controls.Add(_installPlugin, 0, 6); connGrid.SetColumnSpan(_installPlugin, 2);
@@ -88,7 +89,7 @@ internal sealed class MainForm : Form
         _telemetry.StatusChanged += s => Ui(() => _ets2Status.Text = s);
         _telemetry.TrackerEvent += (type, snap) => _ = SendEventAsync(type, snap);
 
-        _tray = new NotifyIcon { Text = "Sterling Tracker 3.0.8", Icon = SystemIcons.Application, Visible = true };
+        _tray = new NotifyIcon { Text = "Sterling Tracker 3.0.10", Icon = SystemIcons.Application, Visible = true };
         _tray.DoubleClick += (_, _) => { Show(); WindowState = FormWindowState.Normal; Activate(); };
         Resize += (_, _) => { if (WindowState == FormWindowState.Minimized) { Hide(); _tray.ShowBalloonTip(1200, "Sterling Tracker", "Tracker is still running in the background.", ToolTipIcon.Info); } };
         FormClosed += async (_, _) => await ShutdownAsync();
@@ -97,9 +98,9 @@ internal sealed class MainForm : Form
 
     private async Task StartupAsync()
     {
-        Log("Tracker 3.0.8 starting");
+        Log("Tracker 3.0.10 starting");
         Log("API: " + _state.ApiBase);
-        if (!string.IsNullOrWhiteSpace(_state.PreferredEts2ProfileRoot)) Log("Linked ETS2 profile: " + _state.PreferredEts2ProfileRoot);
+        if (!string.IsNullOrWhiteSpace(_state.PreferredEts2ProfileRoot)) Log("Linked game profile: " + _state.PreferredEts2ProfileRoot);
         _telemetry.Start();
         _ = HeartbeatLoopAsync(_shutdown.Token);
         var healthy = await _api.CheckHealthAsync(_shutdown.Token);
@@ -140,7 +141,7 @@ internal sealed class MainForm : Form
         if (roots.Count != 1) return;
         _state.PreferredEts2ProfileRoot = roots[0];
         LocalState.Save(_state);
-        Log("Automatically linked ETS2/TMP profile: " + roots[0]);
+        Log("Automatically linked game/TMP profile: " + roots[0]);
     }
 
     private async Task ApplyPayoutAsync()
@@ -151,12 +152,11 @@ internal sealed class MainForm : Form
         try
         {
             if (!_api.IsAuthenticated) throw new InvalidOperationException("Sign in with Discord first.");
-            if (Ets2PayoutService.IsGameRunning()) throw new InvalidOperationException("Close ETS2 and TruckersMP completely before applying money to the save.");
 
             payout = await _api.GetPendingPayoutAsync(_shutdown.Token);
             if (payout is null)
             {
-                MessageBox.Show("There is no pending Sterling payout. Your ETS2/TMP profile can still be linked now for future automatic payouts.", "Sterling payout", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("There is no pending Sterling payout. Your ETS2/ATS/TMP profile can still be linked now for future automatic payouts.", "Sterling payout", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
 
             var selected = ResolveLinkedOrManualSave(true);
@@ -165,16 +165,22 @@ internal sealed class MainForm : Form
 
             if (payout is null)
             {
-                Log("ETS2/TMP profile linked for automatic future payouts");
-                MessageBox.Show("Your ETS2/TMP profile is now linked. Future /withdraw payouts will be applied automatically after ETS2/TMP is closed.", "Sterling profile linked", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                Log("Game/TMP profile linked for automatic future payouts");
+                MessageBox.Show("Your game profile is now linked. Automatic job pay will sync in the background. /withdraw remains available as a manual fallback.", "Sterling profile linked", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
             var result = Ets2PayoutService.ApplyToSave(payout.Amount, selected);
             await _api.CompletePayoutAsync(payout.Id, result.SavePath, _shutdown.Token);
-            Log($"PAYOUT APPLIED: £{payout.Amount:N2} • ETS2 £{result.OldBalance:N0} -> £{result.NewBalance:N0}");
+            _lastPayoutWaitMessage = "";
+            Log($"PAYOUT SYNCED: £{payout.Amount:N2} • game £{result.OldBalance:N0} -> £{result.NewBalance:N0}");
             Log("Backup: " + result.BackupPath);
-            MessageBox.Show($"Success. ETS2 balance changed from £{result.OldBalance:N0} to £{result.NewBalance:N0}.\n\nThis profile is now remembered for future automatic payouts.", "Sterling payout applied", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show($"Success. Game balance changed from £{result.OldBalance:N0} to £{result.NewBalance:N0}.\n\nThis profile is remembered for future automatic payouts.", "Sterling payout synced", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (PayoutSyncPendingException ex)
+        {
+            Log("Live payout sync: " + ex.Message);
+            MessageBox.Show(ex.Message, "Sterling payout queued", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
@@ -194,7 +200,7 @@ internal sealed class MainForm : Form
         var linked = Ets2PayoutService.FindLatestSaveInProfile(_state.PreferredEts2ProfileRoot);
         if (linked is not null)
         {
-            Log("Using linked ETS2/TMP save: " + linked.FullName);
+            Log("Using linked game/TMP save: " + linked.FullName);
             return linked.FullName;
         }
 
@@ -208,8 +214,8 @@ internal sealed class MainForm : Form
         if (!Directory.Exists(fallbackDirectory)) fallbackDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
         using var picker = new OpenFileDialog
         {
-            Title = "Select your ETS2/TMP game.sii once - Sterling will remember the profile",
-            Filter = "ETS2 save (game.sii)|game.sii|All files (*.*)|*.*",
+            Title = "Select your ETS2/ATS/TMP game.sii once - Sterling will remember the profile",
+            Filter = "SCS game save (game.sii)|game.sii|All files (*.*)|*.*",
             CheckFileExists = true,
             Multiselect = false,
             InitialDirectory = fallbackDirectory,
@@ -222,32 +228,37 @@ internal sealed class MainForm : Form
     private void RememberProfile(string savePath)
     {
         var root = Ets2PayoutService.GetProfileRootForSave(savePath);
-        if (string.IsNullOrWhiteSpace(root)) throw new InvalidOperationException("Sterling could not identify the ETS2 profile folder for that save.");
+        if (string.IsNullOrWhiteSpace(root)) throw new InvalidOperationException("Sterling could not identify the game profile folder for that save.");
         if (string.Equals(root, _state.PreferredEts2ProfileRoot, StringComparison.OrdinalIgnoreCase)) return;
         _state.PreferredEts2ProfileRoot = root;
         LocalState.Save(_state);
-        Log("Linked ETS2/TMP profile: " + root);
+        Log("Linked game/TMP profile: " + root);
     }
 
     private async Task TryAutomaticPayoutAsync(CancellationToken ct)
     {
-        if (Ets2PayoutService.IsGameRunning()) return;
         if (string.IsNullOrWhiteSpace(_state.PreferredEts2ProfileRoot)) { TryAutoLinkSingleProfile(); return; }
         if (Interlocked.Exchange(ref _payoutApplying, 1) != 0) return;
         try
         {
             var payout = await _api.GetPendingPayoutAsync(ct);
-            if (payout is null) return;
+            if (payout is null) { _lastPayoutWaitMessage = ""; return; }
             var save = Ets2PayoutService.FindLatestSaveInProfile(_state.PreferredEts2ProfileRoot);
             if (save is null)
             {
-                Log("Automatic payout waiting: linked ETS2 profile has no game.sii yet");
+                const string waiting = "Automatic payout waiting: linked game profile has no game.sii yet";
+                if (_lastPayoutWaitMessage != waiting) { _lastPayoutWaitMessage = waiting; Log(waiting); }
                 return;
             }
             var result = Ets2PayoutService.ApplyToSave(payout.Amount, save.FullName);
             await _api.CompletePayoutAsync(payout.Id, result.SavePath, ct);
-            Log($"AUTO PAYOUT APPLIED: £{payout.Amount:N2} • ETS2 £{result.OldBalance:N0} -> £{result.NewBalance:N0}");
-            Ui(() => _tray.ShowBalloonTip(3500, "Sterling payout applied", $"£{payout.Amount:N2} added to ETS2/TMP. New balance £{result.NewBalance:N0}.", ToolTipIcon.Info));
+            _lastPayoutWaitMessage = "";
+            Log($"AUTO PAYOUT SYNCED: £{payout.Amount:N2} • game £{result.OldBalance:N0} -> £{result.NewBalance:N0}");
+            Ui(() => _tray.ShowBalloonTip(3500, "Sterling payout synced", $"£{payout.Amount:N2} synced to your ETS2/ATS/TMP profile. Game balance £{result.NewBalance:N0}.", ToolTipIcon.Info));
+        }
+        catch (PayoutSyncPendingException ex)
+        {
+            if (_lastPayoutWaitMessage != ex.Message) { _lastPayoutWaitMessage = ex.Message; Log("Live payout sync: " + ex.Message); }
         }
         catch (UnauthorizedAccessException) { throw; }
         catch (Exception ex) { Log("Automatic payout waiting: " + ex.Message); }
@@ -269,7 +280,7 @@ internal sealed class MainForm : Form
                 catch { }
             }
 
-            if ((DateTime.UtcNow - _lastPayoutCheck) >= TimeSpan.FromSeconds(10))
+            if ((DateTime.UtcNow - _lastPayoutCheck) >= TimeSpan.FromSeconds(5))
             {
                 _lastPayoutCheck = DateTime.UtcNow;
                 try { await TryAutomaticPayoutAsync(ct); }
@@ -325,7 +336,7 @@ internal sealed class MainForm : Form
 
     private async Task SendEventAsync(string type, TelemetrySnapshot snapshot)
     {
-        if (!_api.IsAuthenticated) { Ui(() => Log($"ETS2 event {type} detected; sign in to submit it")); return; }
+        if (!_api.IsAuthenticated) { Ui(() => Log($"Game event {type} detected; sign in to submit it")); return; }
         try
         {
             using var response = await _api.SendTelemetryAsync(type, snapshot, true, "online", _shutdown.Token);
@@ -355,7 +366,7 @@ internal sealed class MainForm : Form
         try
         {
             Process.Start(new ProcessStartInfo("powershell.exe", $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\" -PluginSource \"{plugin}\"") { UseShellExecute = true, Verb = "runas" });
-            Log("Telemetry installer started");
+            Log("Game telemetry installer started");
         }
         catch (Exception ex) { Log("Telemetry installer: " + ex.Message); }
     }
