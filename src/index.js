@@ -10,6 +10,7 @@ if(trackerApiOnly){
   await import("./approvals/runtime.js");
   await import("./joblogs/runtime.js");
   await import("./roles/runtime.js");
+  await import("./discordadmin/runtime.js");
   await import("./index-oauth.js");
   await import("./maintenance/reset-vtc-once-startup.js");
 }
