@@ -1,5 +1,70 @@
-import {Client,Events} from "discord.js";
+import {ActionRowBuilder,ButtonBuilder,ButtonStyle,Client,EmbedBuilder,Events} from "discord.js";
 import {handleJobApprovalButton} from "../telemetry/events.js";
+import {db} from "../database/mysql.js";
+import {ensureApprovalSchema} from "../approvals/service.js";
+import {loadConfig} from "../config.js";
+
+const JOB_LOGS_CHANNEL_ID="1537243424707710996";
+let schemaReady=false;
+
+async function ensureJobLogSchema(){
+  if(schemaReady)return;
+  await ensureApprovalSchema();
+  for(const q of [
+    "ALTER TABLE tracked_job_approvals ADD COLUMN discord_log_message_id VARCHAR(32) NULL",
+    "ALTER TABLE tracked_job_approvals ADD COLUMN discord_log_channel_id VARCHAR(32) NULL"
+  ]){
+    try{await db().query(q);}catch(e){if(e.code!=="ER_DUP_FIELDNAME")throw e;}
+  }
+  schemaReady=true;
+}
+
+function money(v){return `£${Number(v||0).toLocaleString("en-GB",{minimumFractionDigits:2,maximumFractionDigits:2})}`;}
+function driverLabel(id){
+  const m=String(id||"").match(/(\d+)$/);
+  if(!m)return "Driver";
+  return `Driver ${String(Number(m[1])).padStart(2,"0")}`;
+}
+function buttons(code){return [new ActionRowBuilder().addComponents(
+  new ButtonBuilder().setCustomId(`sterling_job_approve:${code}`).setLabel("Approve").setEmoji("✅").setStyle(ButtonStyle.Success),
+  new ButtonBuilder().setCustomId(`sterling_job_decline:${code}`).setLabel("Reject").setEmoji("❌").setStyle(ButtonStyle.Danger)
+)];}
+
+async function postMissingJobLogs(client){
+  if(!client.isReady())return;
+  await ensureJobLogSchema();
+  const c=loadConfig();
+  const guild=await client.guilds.fetch(c.guildId);
+  const channel=await guild.channels.fetch(JOB_LOGS_CHANNEL_ID).catch(()=>null);
+  if(!channel?.isTextBased())throw new Error(`Job Logs channel ${JOB_LOGS_CHANNEL_ID} is unavailable`);
+
+  const[rows]=await db().query(`SELECT a.*,d.discord_id,d.sterling_driver_id,d.discord_username
+    FROM tracked_job_approvals a JOIN drivers d ON d.id=a.driver_id
+    WHERE a.status='pending' AND (a.discord_log_message_id IS NULL OR a.discord_log_message_id='')
+    ORDER BY a.created_at ASC LIMIT 20`);
+
+  for(const a of rows){
+    const label=driverLabel(a.sterling_driver_id);
+    const embed=new EmbedBuilder()
+      .setTitle(`✅ JOB COMPLETE — ${label}`)
+      .setDescription(`<@${a.discord_id}> completed a tracked delivery.\n\n**Staff only:** approve or reject this exact job below.`)
+      .addFields(
+        {name:"Job",value:`**${a.approval_code}**`,inline:true},
+        {name:"Driver",value:`${label} • ${a.sterling_driver_id||a.discord_username||"Sterling driver"}`,inline:true},
+        {name:"Route",value:`${a.origin_city||"?"} → ${a.destination_city||"?"}`,inline:false},
+        {name:"Cargo",value:a.cargo||"Unknown",inline:true},
+        {name:"Distance",value:`${Number(a.distance_miles||0).toFixed(1)} mi`,inline:true},
+        {name:"Revenue",value:money(a.revenue),inline:true},
+        {name:"Driver Pay (55%)",value:money(a.driver_payment),inline:true},
+        {name:"Damage",value:`${(Number(a.damage||0)*100).toFixed(1)}%`,inline:true},
+        {name:"Status",value:"⏳ Awaiting staff decision",inline:false}
+      )
+      .setTimestamp(new Date(a.created_at))
+      .setFooter({text:"Sterling Logistics Job Logs • ✅ approve / ❌ reject"});
+    const msg=await channel.send({embeds:[embed],components:buttons(a.approval_code)});
+    await db().execute("UPDATE tracked_job_approvals SET discord_log_message_id=?,discord_log_channel_id=? WHERE id=? AND (discord_log_message_id IS NULL OR discord_log_message_id='')",[msg.id,channel.id,a.id]);
+  }
+}
 
 const originalLogin=Client.prototype.login;
 if(!Client.prototype.__sterlingJobLogsPatched){
@@ -10,6 +75,11 @@ if(!Client.prototype.__sterlingJobLogsPatched){
       this.on(Events.InteractionCreate,async i=>{
         if(!i.isButton())return;
         try{await handleJobApprovalButton(i);}catch(e){console.error("[Job Logs] interaction",e);}
+      });
+      this.once(Events.ClientReady,()=>{
+        const run=()=>postMissingJobLogs(this).catch(e=>console.error("[Job Logs] posting",e));
+        setTimeout(run,12000);
+        setInterval(run,10000);
       });
     }
     return originalLogin.apply(this,args);
