@@ -1,5 +1,5 @@
 #define MyAppName "Sterling Tracker"
-#define MyAppVersion "3.0.8"
+#define MyAppVersion "3.0.9"
 #define MyAppPublisher "Sterling Logistics"
 #define MyAppExeName "SterlingTracker.exe"
 
@@ -10,19 +10,19 @@ AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 VersionInfoVersion={#MyAppVersion}
 VersionInfoCompany={#MyAppPublisher}
-VersionInfoDescription=Official Sterling Logistics ETS2 Tracker
+VersionInfoDescription=Official Sterling Logistics ETS2 and ATS Tracker
 DefaultDirName={localappdata}\Programs\Sterling Logistics\Tracker
 DefaultGroupName=Sterling Logistics
 DisableProgramGroupPage=yes
 OutputDir=..\dist
-OutputBaseFilename=SterlingTracker-3.0.8-Setup
+OutputBaseFilename=SterlingTracker-3.0.9-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-UninstallDisplayName=Sterling Tracker 3.0.8
+UninstallDisplayName=Sterling Tracker 3.0.9
 CloseApplications=yes
 RestartApplications=no
 
