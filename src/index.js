@@ -8,6 +8,7 @@ if(trackerApiOnly){
   await import("./management/runtime.js");
   await import("./manualjobs/runtime.js");
   await import("./approvals/runtime.js");
+  await import("./joblogs/runtime.js");
   await import("./index-oauth.js");
   await import("./maintenance/reset-vtc-once-startup.js");
 }
