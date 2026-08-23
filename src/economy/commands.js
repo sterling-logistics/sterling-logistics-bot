@@ -27,7 +27,7 @@ export async function handleWithdraw(i){
   const amount=i.options.getNumber("amount",true);
   try{
     const p=await requestEts2Withdrawal(d.id,amount);
-    return i.reply({content:`✅ **${money(p.amount)}** has been reserved from your Sterling wallet for ETS2.\n\nPayout ID: **#${p.id}**\nRemaining Sterling balance: **${money(p.balance)}**\n\nKeep the Sterling Tracker running. The payout will apply at the next safe save point and a backup is created first.`,flags:MessageFlags.Ephemeral});
+    return i.reply({content:`✅ **${money(p.amount)}** has been reserved from your Sterling wallet for ETS2.\n\nPayout ID: **#${p.id}**\nRemaining Sterling balance: **${money(p.balance)}**\n\nKeep the Sterling Tracker running. The payout will apply automatically when the linked ETS2/TMP save can be safely updated.`,flags:MessageFlags.Ephemeral});
   }catch(e){return i.reply({content:String(e.message||e),flags:MessageFlags.Ephemeral});}
 }
 
@@ -36,10 +36,10 @@ export async function handlePayslip(i){
   const d=await getDriver(u.id);
   if(!d)return i.reply({content:"No Sterling driver profile found.",flags:MessageFlags.Ephemeral});
   await getDriverEconomy(d.id);
-  const [rows]=await db().execute(`SELECT type,amount,category,details_json,created_at FROM economy_transactions WHERE driver_id=? AND category IN ('driver_payment','job_revenue','fuel','fine','ets2_withdrawal','manual_wallet_credit','manual_wallet_debit') ORDER BY created_at DESC LIMIT 12`,[d.id]);
+  const [rows]=await db().execute(`SELECT type,amount,category,details_json,created_at FROM economy_transactions WHERE driver_id=? AND category IN ('driver_payment','job_revenue','fuel','fine','ets2_withdrawal','ets2_auto_payout','manual_wallet_credit','manual_wallet_debit') ORDER BY created_at DESC LIMIT 12`,[d.id]);
   const text=rows.length?rows.map(r=>{
     const plus=new Set(['job_revenue','manual_wallet_credit']).has(r.category);const sign=plus?'+':'-';
-    const labels={driver_payment:'Driver pay',job_revenue:'Load revenue',fuel:'Fuel',fine:'Fine',ets2_withdrawal:'ETS2 withdrawal',manual_wallet_credit:'Manual credit',manual_wallet_debit:'Manual debit'};
+    const labels={driver_payment:'Driver pay',job_revenue:'Load revenue',fuel:'Fuel',fine:'Fine',ets2_withdrawal:'ETS2 withdrawal',ets2_auto_payout:'Automatic ETS2 payout',manual_wallet_credit:'Manual credit',manual_wallet_debit:'Manual debit'};
     return `**${labels[r.category]||r.category}** — ${sign}${money(r.amount)} — ${r.created_at}`;
   }).join("\n"):"No economy transactions recorded yet.";
   const e=await getDriverEconomy(d.id);
@@ -69,7 +69,26 @@ export async function handleCompanyDeposit(i){
 }
 
 async function walletAdjust(i,direction){
-  try{const u=i.options.getUser('user',true);const d=await getDriver(u.id);if(!d)return i.reply({content:'That member does not have a Sterling driver profile.',flags:MessageFlags.Ephemeral});const amount=i.options.getNumber('amount',true);const reason=i.options.getString('reason',true);const x=await adjustDriverWallet(d.id,amount,direction,reason,i.user.id);await audit(i.user.id,`wallet.${direction}`,u.id,`${money(x.amount)} | ${reason}`);return i.reply({content:`${direction==='credit'?'✅ Credited':'✅ Debited'} **${money(x.amount)}** ${direction==='credit'?'to':'from'} <@${u.id}>. New wallet balance: **${money(x.balance)}**.\nReason: ${reason}`});}catch(e){return i.reply({content:String(e.message||e),flags:MessageFlags.Ephemeral});}
+  try{
+    const u=i.options.getUser('user',true);
+    const d=await getDriver(u.id);
+    if(!d)return i.reply({content:'That member does not have a Sterling driver profile.',flags:MessageFlags.Ephemeral});
+    const amount=i.options.getNumber('amount',true);
+    const reason=i.options.getString('reason',true);
+    const x=await adjustDriverWallet(d.id,amount,direction,reason,i.user.id);
+    await audit(i.user.id,`wallet.${direction}`,u.id,`${money(x.amount)} | ${reason}`);
+
+    if(direction==='credit'){
+      try{
+        const p=await requestEts2Withdrawal(d.id,x.amount);
+        return i.reply({content:`✅ Credited **${money(x.amount)}** to <@${u.id}> and automatically queued it for their linked ETS2/TMP profile.\nPayout ID: **#${p.id}**\nSterling wallet balance: **${money(p.balance)}**.\nReason: ${reason}`});
+      }catch(e){
+        return i.reply({content:`✅ Credited **${money(x.amount)}** to <@${u.id}>. The credit is safe in their Sterling wallet, but automatic ETS2 payout could not be queued: **${String(e.message||e)}**\nReason: ${reason}`});
+      }
+    }
+
+    return i.reply({content:`✅ Debited **${money(x.amount)}** from <@${u.id}>. New wallet balance: **${money(x.balance)}**.\nReason: ${reason}`});
+  }catch(e){return i.reply({content:String(e.message||e),flags:MessageFlags.Ephemeral});}
 }
 export const handleWalletCredit=i=>walletAdjust(i,'credit');
 export const handleWalletDebit=i=>walletAdjust(i,'debit');
