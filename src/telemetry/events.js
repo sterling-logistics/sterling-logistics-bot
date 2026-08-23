@@ -1,4 +1,5 @@
 import {ActionRowBuilder,ButtonBuilder,ButtonStyle,ChannelType,EmbedBuilder,MessageFlags,PermissionFlagsBits} from "discord.js";
+import {db} from "../database/mysql.js";
 import {reviewTrackedApproval} from "../approvals/service.js";
 
 const PREFERRED_TRACKER_EVENTS_CHANNEL_ID="1537772143683706890";
@@ -129,9 +130,20 @@ export async function postTrackerPresence(client,guildId,driver,event){
   }catch(err){console.error("[Tracker Presence]",err);}
 }
 
+async function resolveApprovalCode(driver,event){
+  if(event.approvalCode)return event.approvalCode;
+  const driverId=Number(driver.driver_id||driver.id||0);
+  if(!driverId)return null;
+  try{
+    const[rows]=await db().execute("SELECT approval_code FROM tracked_job_approvals WHERE driver_id=? AND status='pending' ORDER BY created_at DESC,id DESC LIMIT 1",[driverId]);
+    return rows[0]?.approval_code||null;
+  }catch(e){console.warn("[Tracker Events] Could not resolve approval code:",e?.message||e);return null;}
+}
+
 export async function postTrackerEvent(client,guildId,driver,event){
   if(!event||!ALL_DRIVER_STATUS_EVENTS.has(event.type))return;
   try{
+    if(event.type==="job-delivered")event.approvalCode=await resolveApprovalCode(driver,event);
     const guild=await client.guilds.fetch(guildId);const setup=await ensureTrackerChannels(guild);
     const statusCh=driverStatusChannelId?await guild.channels.fetch(driverStatusChannelId).catch(()=>null):setup.status;
     const statusEmbed=buildActivityEmbed(driver,event,"Sterling Logistics Complete Driver Log");if(statusCh&&statusEmbed)await statusCh.send({embeds:[statusEmbed]});
