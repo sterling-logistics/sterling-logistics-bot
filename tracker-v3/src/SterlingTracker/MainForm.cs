@@ -26,18 +26,20 @@ internal sealed class MainForm : Form
     private readonly Button _signIn = Button("Sign in with Discord");
     private readonly Button _signOut = Button("Sign out");
     private readonly Button _installPlugin = Button("Install ETS2 telemetry");
-    private readonly Button _applyPayout = Button("Apply pending payout to ETS2 / TMP");
+    private readonly Button _applyPayout = Button("Apply / link ETS2 payout profile");
 
     private DriverProfile? _profile;
     private DateTime _lastHeartbeat = DateTime.MinValue;
     private DateTime _lastJobStatusCheck = DateTime.MinValue;
+    private DateTime _lastPayoutCheck = DateTime.MinValue;
     private string _lastJobStatusKey = "";
     private int _sending;
+    private int _payoutApplying;
 
     public MainForm()
     {
         _api = new SterlingApiClient(_state);
-        Text = "Sterling Tracker 3.0.7";
+        Text = "Sterling Tracker 3.0.8";
         MinimumSize = new Size(920, 680);
         Size = new Size(1080, 790);
         StartPosition = FormStartPosition.CenterScreen;
@@ -46,8 +48,8 @@ internal sealed class MainForm : Form
         Font = new Font("Segoe UI", 10f);
 
         var header = new Panel { Dock = DockStyle.Top, Height = 82, Padding = new Padding(22, 14, 22, 8) };
-        var title = new Label { Text = "STERLING TRACKER 3.0.7", AutoSize = true, Font = new Font("Segoe UI Semibold", 22f, FontStyle.Bold), ForeColor = Color.FromArgb(76, 169, 255), Location = new Point(20, 14) };
-        var subtitle = new Label { Text = "Direct ETS2 telemetry • Sterling Logistics live operations", AutoSize = true, ForeColor = Color.FromArgb(174, 193, 214), Location = new Point(23, 52) };
+        var title = new Label { Text = "STERLING TRACKER 3.0.8", AutoSize = true, Font = new Font("Segoe UI Semibold", 22f, FontStyle.Bold), ForeColor = Color.FromArgb(76, 169, 255), Location = new Point(20, 14) };
+        var subtitle = new Label { Text = "Discord-linked ETS2/TMP telemetry • automatic Sterling payouts", AutoSize = true, ForeColor = Color.FromArgb(174, 193, 214), Location = new Point(23, 52) };
         header.Controls.Add(title); header.Controls.Add(subtitle);
 
         var body = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(20), ColumnCount = 2, RowCount = 2 };
@@ -86,7 +88,7 @@ internal sealed class MainForm : Form
         _telemetry.StatusChanged += s => Ui(() => _ets2Status.Text = s);
         _telemetry.TrackerEvent += (type, snap) => _ = SendEventAsync(type, snap);
 
-        _tray = new NotifyIcon { Text = "Sterling Tracker 3.0.7", Icon = SystemIcons.Application, Visible = true };
+        _tray = new NotifyIcon { Text = "Sterling Tracker 3.0.8", Icon = SystemIcons.Application, Visible = true };
         _tray.DoubleClick += (_, _) => { Show(); WindowState = FormWindowState.Normal; Activate(); };
         Resize += (_, _) => { if (WindowState == FormWindowState.Minimized) { Hide(); _tray.ShowBalloonTip(1200, "Sterling Tracker", "Tracker is still running in the background.", ToolTipIcon.Info); } };
         FormClosed += async (_, _) => await ShutdownAsync();
@@ -95,8 +97,9 @@ internal sealed class MainForm : Form
 
     private async Task StartupAsync()
     {
-        Log("Tracker 3.0.7 starting");
+        Log("Tracker 3.0.8 starting");
         Log("API: " + _state.ApiBase);
+        if (!string.IsNullOrWhiteSpace(_state.PreferredEts2ProfileRoot)) Log("Linked ETS2 profile: " + _state.PreferredEts2ProfileRoot);
         _telemetry.Start();
         _ = HeartbeatLoopAsync(_shutdown.Token);
         var healthy = await _api.CheckHealthAsync(_shutdown.Token);
@@ -118,6 +121,7 @@ internal sealed class MainForm : Form
             _profile = await _api.SignInAsync(s => Ui(() => { _apiStatus.Text = s; Log(s); }), _shutdown.Token);
             _apiStatus.Text = "Connected";
             RenderProfile();
+            TryAutoLinkSingleProfile();
         }
         catch (Exception ex) { Log("Login failed: " + ex.Message); MessageBox.Show(ex.Message, "Sterling Tracker login", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
         finally { _signIn.Enabled = true; }
@@ -129,8 +133,19 @@ internal sealed class MainForm : Form
         _profile = null; RenderProfile(); Log("Signed out");
     }
 
+    private void TryAutoLinkSingleProfile()
+    {
+        if (!string.IsNullOrWhiteSpace(_state.PreferredEts2ProfileRoot) && Directory.Exists(_state.PreferredEts2ProfileRoot)) return;
+        var roots = Ets2PayoutService.FindProfileRoots();
+        if (roots.Count != 1) return;
+        _state.PreferredEts2ProfileRoot = roots[0];
+        LocalState.Save(_state);
+        Log("Automatically linked ETS2/TMP profile: " + roots[0]);
+    }
+
     private async Task ApplyPayoutAsync()
     {
+        if (Interlocked.Exchange(ref _payoutApplying, 1) != 0) return;
         _applyPayout.Enabled = false;
         PendingPayout? payout = null;
         try
@@ -141,58 +156,25 @@ internal sealed class MainForm : Form
             payout = await _api.GetPendingPayoutAsync(_shutdown.Token);
             if (payout is null)
             {
-                Log("No pending ETS2 payout found on the server");
-                MessageBox.Show("There is no pending Sterling payout. Use /withdraw in Discord first, then come back here.", "Sterling payout", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("There is no pending Sterling payout. Your ETS2/TMP profile can still be linked now for future automatic payouts.", "Sterling payout", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+
+            var selected = ResolveLinkedOrManualSave(true);
+            if (selected is null) return;
+            RememberProfile(selected);
+
+            if (payout is null)
+            {
+                Log("ETS2/TMP profile linked for automatic future payouts");
+                MessageBox.Show("Your ETS2/TMP profile is now linked. Future /withdraw payouts will be applied automatically after ETS2/TMP is closed.", "Sterling profile linked", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
-            var saves = Ets2PayoutService.FindSaves();
-            var newest = saves.FirstOrDefault();
-            var fallbackDirectory = Ets2PayoutService.GetEts2Root();
-            if (!Directory.Exists(fallbackDirectory)) fallbackDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-            var initialDirectory = newest?.DirectoryName;
-            if (string.IsNullOrWhiteSpace(initialDirectory) || !Directory.Exists(initialDirectory)) initialDirectory = fallbackDirectory;
-
-            Log($"Pending payout #{payout.Id}: £{payout.Amount:N2}");
-            if (newest is not null) Log($"Newest detected save: {newest.FullName}");
-            else Log("No save auto-detected; opening manual game.sii selector");
-
-            using var picker = new OpenFileDialog
-            {
-                Title = $"Select the exact ETS2/TMP game.sii to receive £{payout.Amount:N2}",
-                Filter = "ETS2 save (game.sii)|game.sii|All files (*.*)|*.*",
-                CheckFileExists = true,
-                Multiselect = false,
-                InitialDirectory = initialDirectory,
-                FileName = "game.sii",
-                RestoreDirectory = true
-            };
-
-            var detail = newest is null
-                ? "Sterling could not auto-detect your ETS2 save location. That is okay. Click OK and manually browse to the game.sii inside the ETS2/TMP save you actually load."
-                : $"Sterling found {saves.Count} ETS2 save file(s). The newest detected save is:\n\n{newest.FullName}\n\nYou can use that folder or browse to a different game.sii.";
-
-            var choice = MessageBox.Show(
-                $"Pending payout: £{payout.Amount:N2}\n\n{detail}\n\nETS2 and TruckersMP must stay closed while the save is edited.\n\nContinue?",
-                "Select your active ETS2/TMP save",
-                MessageBoxButtons.OKCancel,
-                MessageBoxIcon.Information);
-            if (choice != DialogResult.OK) return;
-            if (picker.ShowDialog(this) != DialogResult.OK) return;
-
-            var selected = picker.FileName;
-            Log("Selected payout save: " + selected);
-
             var result = Ets2PayoutService.ApplyToSave(payout.Amount, selected);
             await _api.CompletePayoutAsync(payout.Id, result.SavePath, _shutdown.Token);
-
             Log($"PAYOUT APPLIED: £{payout.Amount:N2} • ETS2 £{result.OldBalance:N0} -> £{result.NewBalance:N0}");
             Log("Backup: " + result.BackupPath);
-            MessageBox.Show(
-                $"Success.\n\nETS2 balance changed from £{result.OldBalance:N0} to £{result.NewBalance:N0}.\n\nSave edited:\n{result.SavePath}\n\nA backup was created before the change. You can now start ETS2 / TruckersMP and load THIS save.",
-                "Sterling payout applied",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+            MessageBox.Show($"Success. ETS2 balance changed from £{result.OldBalance:N0} to £{result.NewBalance:N0}.\n\nThis profile is now remembered for future automatic payouts.", "Sterling payout applied", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
@@ -200,7 +182,76 @@ internal sealed class MainForm : Form
             if (payout is not null) await _api.FailPayoutAsync(payout.Id, ex.Message, CancellationToken.None);
             MessageBox.Show(ex.Message, "Sterling payout failed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
-        finally { _applyPayout.Enabled = true; }
+        finally
+        {
+            _applyPayout.Enabled = true;
+            Interlocked.Exchange(ref _payoutApplying, 0);
+        }
+    }
+
+    private string? ResolveLinkedOrManualSave(bool allowPicker)
+    {
+        var linked = Ets2PayoutService.FindLatestSaveInProfile(_state.PreferredEts2ProfileRoot);
+        if (linked is not null)
+        {
+            Log("Using linked ETS2/TMP save: " + linked.FullName);
+            return linked.FullName;
+        }
+
+        TryAutoLinkSingleProfile();
+        linked = Ets2PayoutService.FindLatestSaveInProfile(_state.PreferredEts2ProfileRoot);
+        if (linked is not null) return linked.FullName;
+        if (!allowPicker) return null;
+
+        var newest = Ets2PayoutService.FindSaves().FirstOrDefault();
+        var fallbackDirectory = newest?.DirectoryName ?? Ets2PayoutService.GetEts2Root();
+        if (!Directory.Exists(fallbackDirectory)) fallbackDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        using var picker = new OpenFileDialog
+        {
+            Title = "Select your ETS2/TMP game.sii once - Sterling will remember the profile",
+            Filter = "ETS2 save (game.sii)|game.sii|All files (*.*)|*.*",
+            CheckFileExists = true,
+            Multiselect = false,
+            InitialDirectory = fallbackDirectory,
+            FileName = "game.sii",
+            RestoreDirectory = true
+        };
+        return picker.ShowDialog(this) == DialogResult.OK ? picker.FileName : null;
+    }
+
+    private void RememberProfile(string savePath)
+    {
+        var root = Ets2PayoutService.GetProfileRootForSave(savePath);
+        if (string.IsNullOrWhiteSpace(root)) throw new InvalidOperationException("Sterling could not identify the ETS2 profile folder for that save.");
+        if (string.Equals(root, _state.PreferredEts2ProfileRoot, StringComparison.OrdinalIgnoreCase)) return;
+        _state.PreferredEts2ProfileRoot = root;
+        LocalState.Save(_state);
+        Log("Linked ETS2/TMP profile: " + root);
+    }
+
+    private async Task TryAutomaticPayoutAsync(CancellationToken ct)
+    {
+        if (Ets2PayoutService.IsGameRunning()) return;
+        if (string.IsNullOrWhiteSpace(_state.PreferredEts2ProfileRoot)) { TryAutoLinkSingleProfile(); return; }
+        if (Interlocked.Exchange(ref _payoutApplying, 1) != 0) return;
+        try
+        {
+            var payout = await _api.GetPendingPayoutAsync(ct);
+            if (payout is null) return;
+            var save = Ets2PayoutService.FindLatestSaveInProfile(_state.PreferredEts2ProfileRoot);
+            if (save is null)
+            {
+                Log("Automatic payout waiting: linked ETS2 profile has no game.sii yet");
+                return;
+            }
+            var result = Ets2PayoutService.ApplyToSave(payout.Amount, save.FullName);
+            await _api.CompletePayoutAsync(payout.Id, result.SavePath, ct);
+            Log($"AUTO PAYOUT APPLIED: £{payout.Amount:N2} • ETS2 £{result.OldBalance:N0} -> £{result.NewBalance:N0}");
+            Ui(() => _tray.ShowBalloonTip(3500, "Sterling payout applied", $"£{payout.Amount:N2} added to ETS2/TMP. New balance £{result.NewBalance:N0}.", ToolTipIcon.Info));
+        }
+        catch (UnauthorizedAccessException) { throw; }
+        catch (Exception ex) { Log("Automatic payout waiting: " + ex.Message); }
+        finally { Interlocked.Exchange(ref _payoutApplying, 0); }
     }
 
     private async Task HeartbeatLoopAsync(CancellationToken ct)
@@ -216,6 +267,13 @@ internal sealed class MainForm : Form
                 try { await RefreshLatestJobStatusAsync(ct); }
                 catch (UnauthorizedAccessException) { Ui(() => { _state.AccessToken = null; LocalState.Save(_state); _profile = null; RenderProfile(); _apiStatus.Text = "Login expired"; }); continue; }
                 catch { }
+            }
+
+            if ((DateTime.UtcNow - _lastPayoutCheck) >= TimeSpan.FromSeconds(10))
+            {
+                _lastPayoutCheck = DateTime.UtcNow;
+                try { await TryAutomaticPayoutAsync(ct); }
+                catch (UnauthorizedAccessException) { Ui(() => { _state.AccessToken = null; LocalState.Save(_state); _profile = null; RenderProfile(); _apiStatus.Text = "Login expired"; }); continue; }
             }
 
             if (!_telemetry.Connected)
@@ -260,11 +318,7 @@ internal sealed class MainForm : Form
 
         if (latest.Value.Status.Equals("completed", StringComparison.OrdinalIgnoreCase))
         {
-            try
-            {
-                _profile = await _api.GetProfileAsync(ct);
-                Ui(RenderProfile);
-            }
+            try { _profile = await _api.GetProfileAsync(ct); Ui(RenderProfile); }
             catch { }
         }
     }
