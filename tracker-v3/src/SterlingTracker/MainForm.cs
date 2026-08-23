@@ -37,7 +37,7 @@ internal sealed class MainForm : Form
     public MainForm()
     {
         _api = new SterlingApiClient(_state);
-        Text = "Sterling Tracker 3.0.6";
+        Text = "Sterling Tracker 3.0.7";
         MinimumSize = new Size(920, 680);
         Size = new Size(1080, 790);
         StartPosition = FormStartPosition.CenterScreen;
@@ -46,7 +46,7 @@ internal sealed class MainForm : Form
         Font = new Font("Segoe UI", 10f);
 
         var header = new Panel { Dock = DockStyle.Top, Height = 82, Padding = new Padding(22, 14, 22, 8) };
-        var title = new Label { Text = "STERLING TRACKER 3.0.6", AutoSize = true, Font = new Font("Segoe UI Semibold", 22f, FontStyle.Bold), ForeColor = Color.FromArgb(76, 169, 255), Location = new Point(20, 14) };
+        var title = new Label { Text = "STERLING TRACKER 3.0.7", AutoSize = true, Font = new Font("Segoe UI Semibold", 22f, FontStyle.Bold), ForeColor = Color.FromArgb(76, 169, 255), Location = new Point(20, 14) };
         var subtitle = new Label { Text = "Direct ETS2 telemetry • Sterling Logistics live operations", AutoSize = true, ForeColor = Color.FromArgb(174, 193, 214), Location = new Point(23, 52) };
         header.Controls.Add(title); header.Controls.Add(subtitle);
 
@@ -86,7 +86,7 @@ internal sealed class MainForm : Form
         _telemetry.StatusChanged += s => Ui(() => _ets2Status.Text = s);
         _telemetry.TrackerEvent += (type, snap) => _ = SendEventAsync(type, snap);
 
-        _tray = new NotifyIcon { Text = "Sterling Tracker 3.0.6", Icon = SystemIcons.Application, Visible = true };
+        _tray = new NotifyIcon { Text = "Sterling Tracker 3.0.7", Icon = SystemIcons.Application, Visible = true };
         _tray.DoubleClick += (_, _) => { Show(); WindowState = FormWindowState.Normal; Activate(); };
         Resize += (_, _) => { if (WindowState == FormWindowState.Minimized) { Hide(); _tray.ShowBalloonTip(1200, "Sterling Tracker", "Tracker is still running in the background.", ToolTipIcon.Info); } };
         FormClosed += async (_, _) => await ShutdownAsync();
@@ -95,7 +95,7 @@ internal sealed class MainForm : Form
 
     private async Task StartupAsync()
     {
-        Log("Tracker 3.0.6 starting");
+        Log("Tracker 3.0.7 starting");
         Log("API: " + _state.ApiBase);
         _telemetry.Start();
         _ = HeartbeatLoopAsync(_shutdown.Token);
@@ -147,24 +147,33 @@ internal sealed class MainForm : Form
             }
 
             var saves = Ets2PayoutService.FindSaves();
-            if (saves.Count == 0) throw new InvalidOperationException("No ETS2 game.sii saves were found in your Documents\\Euro Truck Simulator 2 folder.");
-            var newest = saves[0];
+            var newest = saves.FirstOrDefault();
+            var fallbackDirectory = Ets2PayoutService.GetEts2Root();
+            if (!Directory.Exists(fallbackDirectory)) fallbackDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            var initialDirectory = newest?.DirectoryName;
+            if (string.IsNullOrWhiteSpace(initialDirectory) || !Directory.Exists(initialDirectory)) initialDirectory = fallbackDirectory;
 
             Log($"Pending payout #{payout.Id}: £{payout.Amount:N2}");
-            Log($"Newest detected save: {newest.FullName}");
+            if (newest is not null) Log($"Newest detected save: {newest.FullName}");
+            else Log("No save auto-detected; opening manual game.sii selector");
 
             using var picker = new OpenFileDialog
             {
-                Title = $"Select the exact ETS2/TMP save to receive £{payout.Amount:N2}",
+                Title = $"Select the exact ETS2/TMP game.sii to receive £{payout.Amount:N2}",
                 Filter = "ETS2 save (game.sii)|game.sii|All files (*.*)|*.*",
                 CheckFileExists = true,
                 Multiselect = false,
-                InitialDirectory = newest.DirectoryName,
-                FileName = "game.sii"
+                InitialDirectory = initialDirectory,
+                FileName = "game.sii",
+                RestoreDirectory = true
             };
 
+            var detail = newest is null
+                ? "Sterling could not auto-detect your ETS2 save location. That is okay. Click OK and manually browse to the game.sii inside the ETS2/TMP save you actually load."
+                : $"Sterling found {saves.Count} ETS2 save file(s). The newest detected save is:\n\n{newest.FullName}\n\nYou can use that folder or browse to a different game.sii.";
+
             var choice = MessageBox.Show(
-                $"Sterling found {saves.Count} ETS2 save file(s).\n\nTo make sure the money goes into the profile/save you actually use in TruckersMP, the next window will ask you to select its game.sii file.\n\nNewest detected save:\n{newest.FullName}\n\nContinue?",
+                $"Pending payout: £{payout.Amount:N2}\n\n{detail}\n\nETS2 and TruckersMP must stay closed while the save is edited.\n\nContinue?",
                 "Select your active ETS2/TMP save",
                 MessageBoxButtons.OKCancel,
                 MessageBoxIcon.Information);
