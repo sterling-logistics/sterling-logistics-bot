@@ -30,7 +30,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $url="https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
-          gh issue edit 8 --title "Sterling Tracker 3.0.7 build RUNNING - $env:GITHUB_RUN_ID" --body "Tracker 3.0.7 manual ETS2/TMP save picker fallback build started.`n`nRun ID: $env:GITHUB_RUN_ID`nCommit: $env:GITHUB_SHA`nRun: $url"
+          gh issue edit 8 --title "Sterling Tracker 3.0.8 build RUNNING - $env:GITHUB_RUN_ID" --body "Tracker 3.0.8 automatic Discord-linked ETS2/TMP profile payout build started.`n`nRun ID: $env:GITHUB_RUN_ID`nCommit: $env:GITHUB_SHA`nRun: $url"
           if($LASTEXITCODE -ne 0){throw 'Could not publish build monitor status'}
 
       - name: Setup .NET 8
@@ -46,7 +46,7 @@ jobs:
         shell: pwsh
         run: dotnet restore .\tracker-v3\src\SterlingTracker\SterlingTracker.csproj -r win-x64
 
-      - name: Publish Tracker 3.0.7
+      - name: Publish Tracker 3.0.8
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
@@ -89,7 +89,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path .\tracker-v3\dist | Out-Null
           & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' .\tracker-v3\installer\SterlingTrackerV3.iss
           if($LASTEXITCODE -ne 0){throw 'Inno Setup failed'}
-          $installer='.\tracker-v3\dist\SterlingTracker-3.0.7-Setup.exe'
+          $installer='.\tracker-v3\dist\SterlingTracker-3.0.8-Setup.exe'
           if(-not (Test-Path $installer)){throw 'Sterling Tracker installer was not created'}
           if((Get-Item $installer).Length -lt 1000000){throw 'Installer is unexpectedly small'}
           Copy-Item $installer '.\tracker-v3\dist\SterlingTracker-Latest-Setup.exe' -Force
@@ -98,9 +98,9 @@ jobs:
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DOWNLOAD-Sterling-Tracker-3.0.7
+          name: DOWNLOAD-Sterling-Tracker-3.0.8
           path: |
-            tracker-v3/dist/SterlingTracker-3.0.7-Setup.exe
+            tracker-v3/dist/SterlingTracker-3.0.8-Setup.exe
             tracker-v3/dist/SterlingTracker-Latest-Setup.exe
           if-no-files-found: error
           retention-days: 30
@@ -113,11 +113,11 @@ jobs:
         run: |
           $ErrorActionPreference='Stop'
           $tag='tracker-v3-latest'
-          $installer='.\tracker-v3\dist\SterlingTracker-3.0.7-Setup.exe'
+          $installer='.\tracker-v3\dist\SterlingTracker-3.0.8-Setup.exe'
           $latest='.\tracker-v3\dist\SterlingTracker-Latest-Setup.exe'
           gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
           if($LASTEXITCODE -ne 0){
-            gh release create $tag $installer $latest --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title 'Sterling Tracker 3.0.7' --notes 'Latest Sterling Tracker. Manual game.sii selection now works even when ETS2 saves cannot be auto-detected.'
+            gh release create $tag $installer $latest --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title 'Sterling Tracker 3.0.8' --notes 'Discord-linked ETS2/TMP profile setup with remembered driver profile and automatic pending payout application after the game closes.'
             if($LASTEXITCODE -ne 0){throw 'Could not create Tracker release'}
           }else{
             gh release upload $tag $installer $latest --repo $env:GITHUB_REPOSITORY --clobber
@@ -134,4 +134,4 @@ jobs:
         run: |
           $url="https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
           $download="https://github.com/$env:GITHUB_REPOSITORY/releases/download/tracker-v3-latest/SterlingTracker-Latest-Setup.exe"
-          gh issue edit 8 --title "Sterling Tracker 3.0.7 build $($env:JOB_STATUS.ToUpper()) - $env:GITHUB_RUN_ID" --body "Tracker 3.0.7 build finished.`n`nStatus: $env:JOB_STATUS`nRun ID: $env:GITHUB_RUN_ID`nCommit: $env:GITHUB_SHA`nRun: $url`nArtifact: DOWNLOAD-Sterling-Tracker-3.0.7`nPermanent installer: $download"
+          gh issue edit 8 --title "Sterling Tracker 3.0.8 build $($env:JOB_STATUS.ToUpper()) - $env:GITHUB_RUN_ID" --body "Tracker 3.0.8 build finished.`n`nStatus: $env:JOB_STATUS`nRun ID: $env:GITHUB_RUN_ID`nCommit: $env:GITHUB_SHA`nRun: $url`nArtifact: DOWNLOAD-Sterling-Tracker-3.0.8`nPermanent installer: $download"
