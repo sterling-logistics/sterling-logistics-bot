@@ -21,12 +21,10 @@ internal static class Ets2PayoutService
         }
 
         AddDocumentsRoot(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
-
         var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         AddDocumentsRoot(Path.Combine(userProfile, "Documents"));
 
-        var oneDriveVars = new[] { "OneDrive", "OneDriveConsumer", "OneDriveCommercial" };
-        foreach (var name in oneDriveVars)
+        foreach (var name in new[] { "OneDrive", "OneDriveConsumer", "OneDriveCommercial" })
         {
             var value = Environment.GetEnvironmentVariable(name);
             if (!string.IsNullOrWhiteSpace(value)) AddDocumentsRoot(Path.Combine(value, "Documents"));
@@ -46,29 +44,66 @@ internal static class Ets2PayoutService
     {
         var saves = new List<FileInfo>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
         foreach (var ets2 in CandidateEts2Roots())
         {
-            var roots = new[] { Path.Combine(ets2, "steam_profiles"), Path.Combine(ets2, "profiles") };
-            foreach (var root in roots)
+            foreach (var root in new[] { Path.Combine(ets2, "steam_profiles"), Path.Combine(ets2, "profiles") })
             {
                 if (!Directory.Exists(root)) continue;
                 try
                 {
                     foreach (var path in Directory.EnumerateFiles(root, "game.sii", SearchOption.AllDirectories))
                     {
-                        if (seen.Add(path))
-                        {
-                            var file = new FileInfo(path);
-                            if (file.Exists) saves.Add(file);
-                        }
+                        if (!seen.Add(path)) continue;
+                        var file = new FileInfo(path);
+                        if (file.Exists) saves.Add(file);
                     }
                 }
                 catch { }
             }
         }
-
         return saves.OrderByDescending(x => x.LastWriteTimeUtc).ToList();
+    }
+
+    public static string? GetProfileRootForSave(string savePath)
+    {
+        if (string.IsNullOrWhiteSpace(savePath)) return null;
+        try
+        {
+            var dir = new DirectoryInfo(Path.GetDirectoryName(savePath)!);
+            while (dir.Parent is not null)
+            {
+                var parentName = dir.Parent.Name;
+                if (parentName.Equals("profiles", StringComparison.OrdinalIgnoreCase) || parentName.Equals("steam_profiles", StringComparison.OrdinalIgnoreCase))
+                    return dir.FullName;
+                dir = dir.Parent;
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    public static FileInfo? FindLatestSaveInProfile(string? profileRoot)
+    {
+        if (string.IsNullOrWhiteSpace(profileRoot) || !Directory.Exists(profileRoot)) return null;
+        try
+        {
+            return Directory.EnumerateFiles(profileRoot, "game.sii", SearchOption.AllDirectories)
+                .Select(x => new FileInfo(x))
+                .Where(x => x.Exists)
+                .OrderByDescending(x => x.LastWriteTimeUtc)
+                .FirstOrDefault();
+        }
+        catch { return null; }
+    }
+
+    public static IReadOnlyList<string> FindProfileRoots()
+    {
+        return FindSaves()
+            .Select(x => GetProfileRootForSave(x.FullName))
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Cast<string>()
+            .ToList();
     }
 
     public static Ets2PayoutApplyResult Apply(decimal amount)
@@ -93,7 +128,7 @@ internal static class Ets2PayoutService
         if (!Regex.IsMatch(text, @"\bmoney_account\s*:", RegexOptions.IgnoreCase))
         {
             EnsureTextSaveFormatFor(save.FullName);
-            throw new InvalidOperationException("This save is still encrypted. Sterling has set g_save_format to 2 for the detected ETS2 folder. Start normal ETS2, load THIS profile, create a new manual save, exit ETS2 fully, then click Apply payout again and select that new save's game.sii.");
+            throw new InvalidOperationException("This save is still encrypted. Sterling has set g_save_format to 2 for the detected ETS2 folder. Start normal ETS2, load THIS profile, create a new manual save, exit ETS2 fully, then try again.");
         }
 
         var lines = File.ReadAllLines(save.FullName);
