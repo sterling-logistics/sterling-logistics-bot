@@ -1,4 +1,5 @@
-import {ChannelType,EmbedBuilder,PermissionFlagsBits} from "discord.js";
+import {ActionRowBuilder,ButtonBuilder,ButtonStyle,ChannelType,EmbedBuilder,MessageFlags,PermissionFlagsBits} from "discord.js";
+import {reviewTrackedApproval} from "../approvals/service.js";
 
 const PREFERRED_TRACKER_EVENTS_CHANNEL_ID="1537772143683706890";
 const COMPLETED_JOBS_CHANNEL_ID="1537243424707710996";
@@ -41,12 +42,12 @@ function who(driver){return `${driver.sterling_driver_id||driver.discord_usernam
 function buildActivityEmbed(driver,event,footer="Sterling Logistics Tracker"){
   const d=event.data||{};let title="🚛 Tracker Event",description=`**${who(driver)}** triggered a tracker event.`,fields=[];
   switch(event.type){
-    case "job-started": title="🟢 Job Started";description=`**${who(driver)}** started an ETS2 job.`;fields=[{name:"Cargo",value:d.cargo||"Unknown",inline:true},{name:"Route",value:route(d),inline:false},{name:"Truck",value:d.truck||"Unknown",inline:true}];break;
-    case "job-delivered": title="🟡 Delivery Completed • Awaiting Approval";description=`**${who(driver)}** completed a delivery. Management approval is required before pay and official stats are released.`;fields=[{name:"Cargo",value:d.cargo||"Unknown",inline:true},{name:"Route",value:route(d),inline:false},{name:"Distance",value:`${f((Number(d.distanceKm||d.jobDeliveredDistanceKm)||0)*0.621371)} mi`,inline:true},{name:"Revenue",value:`€${Math.round(Number(d.revenue||d.jobDeliveredRevenue)||0).toLocaleString()}`,inline:true},{name:"Projected Driver Pay",value:`€${Math.round((Number(d.revenue||d.jobDeliveredRevenue)||0)*Number(process.env.DRIVER_PAY_RATE||0.55)).toLocaleString()}`,inline:true},{name:"Damage",value:`${f(Math.max(Number(d.truckDamage)||0,Number(d.trailerDamage)||0,Number(d.cargoDamage)||0)*100)}%`,inline:true},{name:"Status",value:"Pending management verification",inline:false}];break;
-    case "job-cancelled": title="🟠 Job Cancelled";description=`**${who(driver)}** cancelled an ETS2 job.`;fields=[{name:"Cargo",value:d.cargo||"Unknown",inline:true},{name:"Route",value:route(d),inline:false}];break;
+    case "job-started": title="🟢 Job Started";description=`**${who(driver)}** started a driving job.`;fields=[{name:"Cargo",value:d.cargo||"Unknown",inline:true},{name:"Route",value:route(d),inline:false},{name:"Truck",value:d.truck||"Unknown",inline:true}];break;
+    case "job-delivered": title=`🟡 JOB COMPLETE — ${driver.sterling_driver_id||"Driver"}`;description=`**${who(driver)}** completed a delivery. Staff must approve or decline this exact job below.`;fields=[{name:"Job",value:event.approvalCode?`**${event.approvalCode}**`:"Pending reference",inline:true},{name:"Cargo",value:d.cargo||"Unknown",inline:true},{name:"Route",value:route(d),inline:false},{name:"Distance",value:`${f((Number(d.distanceKm||d.jobDeliveredDistanceKm)||0)*0.621371)} mi`,inline:true},{name:"Revenue",value:`£${Math.round(Number(d.revenue||d.jobDeliveredRevenue)||0).toLocaleString()}`,inline:true},{name:"Projected Driver Pay",value:`£${Math.round((Number(d.revenue||d.jobDeliveredRevenue)||0)*Number(process.env.DRIVER_PAY_RATE||0.55)).toLocaleString()}`,inline:true},{name:"Damage",value:`${f(Math.max(Number(d.truckDamage)||0,Number(d.trailerDamage)||0,Number(d.cargoDamage)||0)*100)}%`,inline:true},{name:"Status",value:"⏳ Awaiting staff decision",inline:false}];break;
+    case "job-cancelled": title="🟠 Job Cancelled";description=`**${who(driver)}** cancelled a driving job.`;fields=[{name:"Cargo",value:d.cargo||"Unknown",inline:true},{name:"Route",value:route(d),inline:false}];break;
     case "fuel-stop": title="⛽ Fuel Stop";description=`**${who(driver)}** refuelled.`;fields=[{name:"Fuel Added",value:`${f(event.fuelAdded)} L`,inline:true},{name:"Fuel Level",value:`${f(d.fuelLiters)} L`,inline:true},{name:"Truck",value:d.truck||"Unknown",inline:true}];break;
-    case "fine": title="🚨 Fine Issued";description=`**${who(driver)}** received an in-game fine.`;fields=[{name:"Offence",value:d.fineOffence||"Unknown",inline:true},{name:"Amount",value:`€${Math.round(Number(d.fineAmount)||0).toLocaleString()}`,inline:true},{name:"Speed",value:`${f((Number(d.speedMps)||0)*2.2369362921)} mph`,inline:true}];break;
-    case "rest-stop": title="🛏️ Rest Stop";description=`**${who(driver)}** took an ETS2 rest stop.`;fields=[{name:"Truck",value:d.truck||"Unknown",inline:true},{name:"Game Time Jump",value:`${Math.round(Number(d.gameTimeJump)||0)} game min`,inline:true}];break;
+    case "fine": title="🚨 Fine Issued";description=`**${who(driver)}** received an in-game fine.`;fields=[{name:"Offence",value:d.fineOffence||"Unknown",inline:true},{name:"Amount",value:`£${Math.round(Number(d.fineAmount)||0).toLocaleString()}`,inline:true},{name:"Speed",value:`${f((Number(d.speedMps)||0)*2.2369362921)} mph`,inline:true}];break;
+    case "rest-stop": title="🛏️ Rest Stop";description=`**${who(driver)}** took a rest stop.`;fields=[{name:"Truck",value:d.truck||"Unknown",inline:true},{name:"Game Time Jump",value:`${Math.round(Number(d.gameTimeJump)||0)} game min`,inline:true}];break;
     case "crash": title="💥 Crash / Damage";description=`**${who(driver)}** had a new damage event.`;fields=[{name:"Speed",value:`${f(event.speedMph)} mph`,inline:true},{name:"Truck Damage",value:`${f((Number(d.truckDamage)||0)*100)}%`,inline:true}];break;
     case "toll": title="🛣️ Toll Gate";description=`**${who(driver)}** passed a toll gate.`;fields=[{name:"Route",value:route(d),inline:false},{name:"Truck",value:d.truck||"Unknown",inline:true}];break;
     case "ferry": title="⛴️ Ferry Used";description=`**${who(driver)}** used a ferry.`;fields=[{name:"Route",value:route(d),inline:false},{name:"Truck",value:d.truck||"Unknown",inline:true}];break;
@@ -54,6 +55,54 @@ function buildActivityEmbed(driver,event,footer="Sterling Logistics Tracker"){
     default:return null;
   }
   const e=new EmbedBuilder().setTitle(title).setDescription(description).setTimestamp().setFooter({text:footer});if(fields.length)e.addFields(fields);return e;
+}
+
+function approvalButtons(code){
+  if(!code)return [];
+  return [new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`sterling_job_approve:${code}`).setLabel("Approve").setEmoji("✅").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`sterling_job_decline:${code}`).setLabel("Decline").setEmoji("❌").setStyle(ButtonStyle.Danger)
+  )];
+}
+
+function isStaffInteraction(i){
+  if(i.memberPermissions?.has(PermissionFlagsBits.Administrator))return true;
+  const roles=i.member?.roles?.cache;
+  return Boolean(roles?.some(r=>STAFF_ROLE_NAMES.some(n=>r.name.toLowerCase()===n.toLowerCase())));
+}
+
+export async function handleJobApprovalButton(i){
+  if(!i.isButton())return false;
+  const m=/^sterling_job_(approve|decline):(.+)$/.exec(i.customId||"");
+  if(!m)return false;
+  if(!isStaffInteraction(i)){
+    await i.reply({content:"Only Sterling management staff can approve or decline completed jobs.",flags:MessageFlags.Ephemeral});
+    return true;
+  }
+  const decision=m[1]==="approve"?"approve":"decline",code=String(m[2]||"").toUpperCase();
+  try{
+    const a=await reviewTrackedApproval(code,decision,i.user.id,`Decision from job-log button by ${i.user.tag||i.user.id}`);
+    const approved=decision==="approve";
+    const embed=new EmbedBuilder()
+      .setTitle(`${approved?"✅ JOB APPROVED":"❌ JOB DECLINED"} — ${a.sterling_driver_id||"Driver"}`)
+      .setDescription(`<@${a.discord_id}> • **${code}**`)
+      .addFields(
+        {name:"Route",value:`${a.origin_city||"?"} → ${a.destination_city||"?"}`,inline:false},
+        {name:"Cargo",value:a.cargo||"Unknown",inline:true},
+        {name:"Distance",value:`${Number(a.distance_miles||0).toFixed(1)} mi`,inline:true},
+        {name:"Revenue",value:`£${Number(a.revenue||0).toLocaleString("en-GB",{minimumFractionDigits:2,maximumFractionDigits:2})}`,inline:true},
+        {name:"Driver Payment",value:approved?`✅ £${Number(a.driver_payment||0).toLocaleString("en-GB",{minimumFractionDigits:2,maximumFractionDigits:2})} released and queued for game sync.`:"❌ No driver payment released.",inline:false},
+        {name:"Reviewed By",value:`<@${i.user.id}>`,inline:true}
+      )
+      .setTimestamp()
+      .setFooter({text:"Sterling Logistics Job Logs"});
+    await i.update({embeds:[embed],components:[]});
+  }catch(e){
+    const msg=String(e.message||e);
+    if(!i.replied&&!i.deferred)await i.reply({content:msg,flags:MessageFlags.Ephemeral});
+    else await i.followUp({content:msg,flags:MessageFlags.Ephemeral}).catch(()=>{});
+  }
+  return true;
 }
 
 function buildPresenceEmbed(driver,event,footer){
@@ -92,9 +141,9 @@ export async function postTrackerEvent(client,guildId,driver,event){
     }
     if(event.type==="job-delivered"){
       const completedCh=await guild.channels.fetch(COMPLETED_JOBS_CHANNEL_ID).catch(()=>null);
-      const completedEmbed=buildActivityEmbed(driver,event,"Sterling Logistics Completed Jobs");
-      if(completedCh?.isTextBased()&&completedEmbed)await completedCh.send({embeds:[completedEmbed]});
-      else console.warn(`[Tracker Events] Completed-jobs channel ${COMPLETED_JOBS_CHANNEL_ID} is unavailable or not text-based`);
+      const completedEmbed=buildActivityEmbed(driver,event,"Sterling Logistics Job Logs");
+      if(completedCh?.isTextBased()&&completedEmbed)await completedCh.send({embeds:[completedEmbed],components:approvalButtons(event.approvalCode)});
+      else console.warn(`[Tracker Events] Job-logs channel ${COMPLETED_JOBS_CHANNEL_ID} is unavailable or not text-based`);
     }
   }catch(err){console.error("[Tracker Events]",err);}
 }
