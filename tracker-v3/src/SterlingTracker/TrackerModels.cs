@@ -69,4 +69,5 @@ internal sealed class TrackerState
     public string ApiBase { get; set; } = PrimaryApiBase;
     public string SessionCode { get; set; } = $"trk3-{Guid.NewGuid():N}";
     public string? AccessToken { get; set; }
+    public string? PreferredEts2ProfileRoot { get; set; }
 }
