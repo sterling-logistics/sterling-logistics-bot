@@ -1,0 +1,82 @@
+<Window x:Class="Sterling.Logistics.ControlCentre.MainWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ Title="Sterling Control Centre" Width="1500" Height="900" MinWidth="1200" MinHeight="760"
+ WindowStartupLocation="CenterScreen" Background="{StaticResource Bg}">
+ <Grid>
+  <Grid.ColumnDefinitions><ColumnDefinition Width="230"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+  <Border Background="#0C1625" Padding="18">
+   <DockPanel>
+    <StackPanel DockPanel.Dock="Top">
+     <TextBlock Text="STERLING" Foreground="White" FontSize="26" FontWeight="Bold"/>
+     <TextBlock Text="CONTROL CENTRE" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,2,0,28"/>
+     <Button Content="Dashboard" Height="42" Margin="0,0,0,8"/>
+     <Button Content="Live Map" Height="42" Margin="0,0,0,8"/>
+     <Button Content="Drivers" Height="42" Margin="0,0,0,8"/>
+     <Button Content="Jobs" Height="42" Margin="0,0,0,8"/>
+     <Button Content="Approvals" Height="42" Margin="0,0,0,8"/>
+     <Button Content="Payments" Height="42" Margin="0,0,0,8"/>
+     <Button Content="Finance" Height="42" Margin="0,0,0,8"/>
+     <Button Content="Audit Logs" Height="42" Margin="0,0,0,8"/>
+     <Button Content="Owner Menu" Height="42" Margin="0,0,0,8"/>
+    </StackPanel>
+    <StackPanel DockPanel.Dock="Bottom" VerticalAlignment="Bottom">
+     <TextBlock x:Name="OwnerNameText" Text="Not signed in" Foreground="White" FontWeight="SemiBold"/>
+     <TextBlock x:Name="OwnerStatusText" Text="Owner / Founder" Foreground="{StaticResource Muted}" Margin="0,4,0,0"/>
+    </StackPanel>
+   </DockPanel>
+  </Border>
+
+  <Grid Grid.Column="1" Margin="26">
+   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+   <DockPanel Grid.Row="0" LastChildFill="False">
+    <StackPanel DockPanel.Dock="Left">
+     <TextBlock Text="Fleet Operations" Foreground="White" FontSize="30" FontWeight="Bold"/>
+     <TextBlock Text="Live Sterling Logistics overview" Foreground="{StaticResource Muted}" FontSize="14"/>
+    </StackPanel>
+    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+     <TextBox x:Name="UsernameBox" Width="150" Height="34" Margin="0,0,8,0" Padding="8" ToolTip="Owner username"/>
+     <PasswordBox x:Name="PasswordBox" Width="150" Height="34" Margin="0,0,8,0" Padding="8" ToolTip="Owner password"/>
+     <Button x:Name="LoginButton" Content="Owner Sign In" Width="110" Height="34" Click="LoginButton_Click"/>
+    </StackPanel>
+   </DockPanel>
+
+   <UniformGrid Grid.Row="1" Columns="6" Margin="0,24,0,20">
+    <Border Background="{StaticResource Panel}" CornerRadius="10" Padding="16" Margin="0,0,10,0"><StackPanel><TextBlock Text="ONLINE DRIVERS" Foreground="{StaticResource Muted}"/><TextBlock x:Name="OnlineDriversText" Text="—" Foreground="White" FontSize="28" FontWeight="Bold"/></StackPanel></Border>
+    <Border Background="{StaticResource Panel}" CornerRadius="10" Padding="16" Margin="0,0,10,0"><StackPanel><TextBlock Text="ON JOB" Foreground="{StaticResource Muted}"/><TextBlock x:Name="OnJobText" Text="—" Foreground="White" FontSize="28" FontWeight="Bold"/></StackPanel></Border>
+    <Border Background="{StaticResource Panel}" CornerRadius="10" Padding="16" Margin="0,0,10,0"><StackPanel><TextBlock Text="IN PROGRESS" Foreground="{StaticResource Muted}"/><TextBlock x:Name="JobsInProgressText" Text="—" Foreground="White" FontSize="28" FontWeight="Bold"/></StackPanel></Border>
+    <Border Background="{StaticResource Panel}" CornerRadius="10" Padding="16" Margin="0,0,10,0"><StackPanel><TextBlock Text="APPROVALS" Foreground="{StaticResource Muted}"/><TextBlock x:Name="ApprovalsText" Text="—" Foreground="White" FontSize="28" FontWeight="Bold"/></StackPanel></Border>
+    <Border Background="{StaticResource Panel}" CornerRadius="10" Padding="16" Margin="0,0,10,0"><StackPanel><TextBlock Text="PAYOUTS" Foreground="{StaticResource Muted}"/><TextBlock x:Name="PayoutsText" Text="—" Foreground="White" FontSize="28" FontWeight="Bold"/></StackPanel></Border>
+    <Border Background="{StaticResource Panel}" CornerRadius="10" Padding="16"><StackPanel><TextBlock Text="FAILED PAYOUTS" Foreground="{StaticResource Muted}"/><TextBlock x:Name="FailedPayoutsText" Text="—" Foreground="White" FontSize="28" FontWeight="Bold"/></StackPanel></Border>
+   </UniformGrid>
+
+   <Grid Grid.Row="2">
+    <Grid.ColumnDefinitions><ColumnDefinition Width="1.6*"/><ColumnDefinition Width="1*"/></Grid.ColumnDefinitions>
+    <Border Background="{StaticResource Panel}" CornerRadius="12" Padding="18" Margin="0,0,12,0">
+     <DockPanel>
+      <TextBlock DockPanel.Dock="Top" Text="LIVE DRIVER FEED" Foreground="White" FontWeight="Bold" FontSize="15" Margin="0,0,0,12"/>
+      <DataGrid x:Name="DriversGrid" AutoGenerateColumns="False" IsReadOnly="True" Background="Transparent" Foreground="White" BorderThickness="0" GridLinesVisibility="None" RowBackground="#101B2C" AlternatingRowBackground="#152238">
+       <DataGrid.Columns>
+        <DataGridTextColumn Header="DRIVER" Binding="{Binding DisplayName}" Width="*"/>
+        <DataGridTextColumn Header="STATUS" Binding="{Binding Status}" Width="110"/>
+        <DataGridTextColumn Header="GAME" Binding="{Binding Game}" Width="80"/>
+        <DataGridTextColumn Header="LOCATION" Binding="{Binding City}" Width="150"/>
+        <DataGridTextColumn Header="SPEED" Binding="{Binding SpeedKph, StringFormat={}{0:0} km/h}" Width="100"/>
+        <DataGridTextColumn Header="CARGO" Binding="{Binding Cargo}" Width="170"/>
+        <DataGridTextColumn Header="DESTINATION" Binding="{Binding DestinationCity}" Width="150"/>
+       </DataGrid.Columns>
+      </DataGrid>
+     </DockPanel>
+    </Border>
+    <Border Grid.Column="1" Background="{StaticResource Panel}" CornerRadius="12" Padding="18">
+     <DockPanel>
+      <TextBlock DockPanel.Dock="Top" Text="RECENT JOBS" Foreground="White" FontWeight="Bold" FontSize="15" Margin="0,0,0,12"/>
+      <ListBox x:Name="JobsList" Background="Transparent" BorderThickness="0" Foreground="White"/>
+     </DockPanel>
+    </Border>
+   </Grid>
+
+   <TextBlock Grid.Row="3" x:Name="StatusText" Text="Control Centre locked. Sign in with Owner/Founder credentials." Foreground="{StaticResource Muted}" Margin="0,16,0,0"/>
+  </Grid>
+ </Grid>
+</Window>
