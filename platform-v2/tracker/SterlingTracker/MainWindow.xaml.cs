@@ -8,16 +8,19 @@ public partial class MainWindow : Window
     private readonly SterlingApiClient _api = new();
     private readonly SecureSessionStore _sessionStore = new();
     private readonly TrackerAgent _agent;
+    private readonly PayoutWorker _payoutWorker;
 
     public MainWindow()
     {
         InitializeComponent();
         _agent = new TrackerAgent(_api, new GameDetector(), _sessionStore);
+        _payoutWorker = new PayoutWorker(_api, _agent, new PayoutJournal());
         _agent.StatusChanged += (_, status) => Dispatcher.Invoke(() =>
         {
             var game = status.GameRunning ? $" · {status.Game?.ToUpperInvariant()} detected" : string.Empty;
             StatusText.Text = $"{status.Message}{game}";
         });
+        _payoutWorker.StatusChanged += (_, message) => Dispatcher.Invoke(() => StatusText.Text = message);
         Loaded += MainWindow_Loaded;
         Closed += MainWindow_Closed;
         StatusText.Text = "Ready to connect.";
@@ -90,11 +93,13 @@ public partial class MainWindow : Window
     private void StartAgent(LoginResponse session)
     {
         _agent.Start(session);
+        _payoutWorker.Start();
         SignInButton.IsEnabled = false;
     }
 
     private async void MainWindow_Closed(object? sender, EventArgs e)
     {
+        await _payoutWorker.DisposeAsync();
         await _agent.DisposeAsync();
     }
 }
