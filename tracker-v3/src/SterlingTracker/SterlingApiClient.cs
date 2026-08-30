@@ -13,45 +13,54 @@ internal sealed class SterlingApiClient : IDisposable
     private readonly TrackerState _state;
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(10) };
 
-    public SterlingApiClient(TrackerState state)
-    {
-        _state = state;
-        _state.ApiBase = TrackerState.PrimaryApiBase;
-        LocalState.Save(_state);
-    }
+    public SterlingApiClient(TrackerState state) => _state = state;
 
     public bool IsAuthenticated => !string.IsNullOrWhiteSpace(_state.AccessToken);
     public string ApiBase => _state.ApiBase;
 
+    private IEnumerable<string> ApiCandidates()
+    {
+        return new[]
+        {
+            _state.ApiBase,
+            TrackerState.PrimaryApiBase,
+            TrackerState.LegacyWebsiteApiBase,
+            TrackerState.LegacyApiBase,
+            TrackerState.LegacyApiBase8101
+        }.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.TrimEnd('/')).Distinct(StringComparer.OrdinalIgnoreCase);
+    }
+
     private HttpRequestMessage Request(HttpMethod method, string path)
     {
-        var req = new HttpRequestMessage(method, TrackerState.PrimaryApiBase.TrimEnd('/') + path);
+        var req = new HttpRequestMessage(method, _state.ApiBase.TrimEnd('/') + path);
         if (IsAuthenticated) req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _state.AccessToken);
         return req;
     }
 
     private async Task<string> ResolveApiAsync(Action<string>? status = null, CancellationToken ct = default)
     {
-        var candidate = TrackerState.PrimaryApiBase.TrimEnd('/');
-        ct.ThrowIfCancellationRequested();
-        status?.Invoke($"Connecting to {candidate}…");
-        try
+        var failures = new List<string>();
+        foreach (var candidate in ApiCandidates())
         {
-            using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            probeCts.CancelAfter(TimeSpan.FromSeconds(5));
-            using var res = await _http.GetAsync(candidate + "/health", probeCts.Token);
-            if (!res.IsSuccessStatusCode) throw new HttpRequestException($"Tracker API returned {(int)res.StatusCode}");
-            using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync(probeCts.Token));
-            if (!doc.RootElement.TryGetProperty("ok", out var ok) || !ok.GetBoolean()) throw new HttpRequestException("Tracker API returned an unhealthy response");
-            _state.ApiBase = candidate;
-            LocalState.Save(_state);
-            status?.Invoke($"Sterling API connected • {candidate}");
-            return candidate;
+            ct.ThrowIfCancellationRequested();
+            status?.Invoke($"Connecting to {candidate}…");
+            try
+            {
+                using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                probeCts.CancelAfter(TimeSpan.FromSeconds(5));
+                using var res = await _http.GetAsync(candidate + "/health", probeCts.Token);
+                if (!res.IsSuccessStatusCode) { failures.Add($"{candidate} returned {(int)res.StatusCode}"); continue; }
+                using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync(probeCts.Token));
+                if (!doc.RootElement.TryGetProperty("ok", out var ok) || !ok.GetBoolean()) { failures.Add($"{candidate} unhealthy"); continue; }
+                _state.ApiBase = candidate;
+                LocalState.Save(_state);
+                status?.Invoke($"Sterling API connected • {candidate}");
+                return candidate;
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested) { failures.Add($"{candidate} timed out"); }
+            catch (Exception ex) { failures.Add($"{candidate}: {ex.Message}"); }
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-        {
-            throw new HttpRequestException($"Sterling Tracker API timed out at {candidate}");
-        }
+        throw new HttpRequestException("No Sterling API endpoint is reachable. " + string.Join(" | ", failures.Take(3)));
     }
 
     public async Task<bool> CheckHealthAsync(CancellationToken ct = default)
@@ -91,6 +100,7 @@ internal sealed class SterlingApiClient : IDisposable
     public async Task<DriverProfile?> GetProfileAsync(CancellationToken ct = default)
     {
         if (!IsAuthenticated) return null;
+        await ResolveApiAsync(null, ct);
         using var req = Request(HttpMethod.Get, "/api/desktop/me");
         using var res = await _http.SendAsync(req, ct);
         if (res.StatusCode == System.Net.HttpStatusCode.Unauthorized) return null;
@@ -109,11 +119,11 @@ internal sealed class SterlingApiClient : IDisposable
 
     public async Task<DriverProfile> SignInAsync(Action<string>? status = null, CancellationToken ct = default)
     {
-        await ResolveApiAsync(status, ct);
+        var baseUrl = await ResolveApiAsync(status, ct);
         status?.Invoke("Starting Discord login…");
-        using var start = new HttpRequestMessage(HttpMethod.Post, TrackerState.PrimaryApiBase.TrimEnd('/') + "/auth/desktop/start")
+        using var start = new HttpRequestMessage(HttpMethod.Post, baseUrl + "/auth/desktop/start")
         {
-            Content = JsonContent.Create(new { deviceName = $"Sterling Tracker 3.0.6 • {Environment.MachineName}" })
+            Content = JsonContent.Create(new { deviceName = $"Sterling Tracker {CompatibilityInfo.TrackerVersion} • {Environment.MachineName}" })
         };
         using var startRes = await _http.SendAsync(start, ct);
         var startBody = await startRes.Content.ReadAsStringAsync(ct);
@@ -129,7 +139,7 @@ internal sealed class SterlingApiClient : IDisposable
         {
             ct.ThrowIfCancellationRequested();
             await Task.Delay(2000, ct);
-            using var res = await _http.GetAsync(TrackerState.PrimaryApiBase.TrimEnd('/') + "/auth/desktop/status?state=" + Uri.EscapeDataString(state), ct);
+            using var res = await _http.GetAsync(baseUrl + "/auth/desktop/status?state=" + Uri.EscapeDataString(state), ct);
             var json = await res.Content.ReadAsStringAsync(ct);
             using var doc = JsonDocument.Parse(json);
             var r = doc.RootElement;
@@ -137,7 +147,7 @@ internal sealed class SterlingApiClient : IDisposable
             if (loginStatus == "pending") continue;
             if (loginStatus != "complete") throw new InvalidOperationException(r.TryGetProperty("error", out var e) ? e.GetString() : "Discord login failed");
             _state.AccessToken = r.GetProperty("token").GetString();
-            _state.ApiBase = TrackerState.PrimaryApiBase;
+            _state.ApiBase = baseUrl;
             LocalState.Save(_state);
             var profile = await GetProfileAsync(ct) ?? throw new InvalidOperationException("Sterling driver profile could not be loaded");
             status?.Invoke($"Signed in as {profile.SterlingDriverId}");
@@ -150,16 +160,16 @@ internal sealed class SterlingApiClient : IDisposable
     {
         if (IsAuthenticated)
         {
-            try { using var req = Request(HttpMethod.Post, "/auth/desktop/logout"); using var _ = await _http.SendAsync(req, ct); } catch { }
+            try { await ResolveApiAsync(null, ct); using var req = Request(HttpMethod.Post, "/auth/desktop/logout"); using var _ = await _http.SendAsync(req, ct); } catch { }
         }
         _state.AccessToken = null;
-        _state.ApiBase = TrackerState.PrimaryApiBase;
         LocalState.Save(_state);
     }
 
     public async Task<JsonDocument?> SendTelemetryAsync(string eventType, TelemetrySnapshot snapshot, bool directEvent = false, string status = "online", CancellationToken ct = default)
     {
         if (!IsAuthenticated) return null;
+        await ResolveApiAsync(null, ct);
         var payload = new { sessionCode = _state.SessionCode, status, eventType, directEvent, data = snapshot.ToApiData() };
         using var req = Request(HttpMethod.Post, "/api/tracker/telemetry");
         req.Content = JsonContent.Create(payload);
@@ -173,6 +183,7 @@ internal sealed class SterlingApiClient : IDisposable
     public async Task<PendingPayout?> GetPendingPayoutAsync(CancellationToken ct = default)
     {
         if (!IsAuthenticated) throw new UnauthorizedAccessException("Sign in to Sterling Tracker first.");
+        await ResolveApiAsync(null, ct);
         using var req = Request(HttpMethod.Get, "/api/tracker/payout");
         using var res = await _http.SendAsync(req, ct);
         if (res.StatusCode == System.Net.HttpStatusCode.Unauthorized) throw new UnauthorizedAccessException("Sterling Tracker login has expired");
@@ -187,6 +198,7 @@ internal sealed class SterlingApiClient : IDisposable
 
     public async Task CompletePayoutAsync(long id, string savePath, CancellationToken ct = default)
     {
+        await ResolveApiAsync(null, ct);
         using var req = Request(HttpMethod.Post, $"/api/tracker/payout/{id}/complete");
         req.Content = JsonContent.Create(new { savePath });
         using var res = await _http.SendAsync(req, ct);
@@ -200,6 +212,7 @@ internal sealed class SterlingApiClient : IDisposable
     {
         try
         {
+            await ResolveApiAsync(null, ct);
             using var req = Request(HttpMethod.Post, $"/api/tracker/payout/{id}/fail");
             req.Content = JsonContent.Create(new { error });
             using var _ = await _http.SendAsync(req, ct);
@@ -210,6 +223,7 @@ internal sealed class SterlingApiClient : IDisposable
     public async Task<(string JobCode, string Status)?> GetLatestJobStatusAsync(CancellationToken ct = default)
     {
         if (!IsAuthenticated) return null;
+        await ResolveApiAsync(null, ct);
         using var req = Request(HttpMethod.Get, "/api/tracker/jobs");
         using var res = await _http.SendAsync(req, ct);
         if (res.StatusCode == System.Net.HttpStatusCode.Unauthorized) throw new UnauthorizedAccessException("Sterling Tracker login has expired");
