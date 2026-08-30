@@ -43,6 +43,7 @@ public partial class MainWindow : Window
             OwnerNameText.Text = _api.CurrentOwner?.DisplayName ?? username;
             OwnerStatusText.Text = "Owner / Founder · Online";
             OwnerMenuButton.IsEnabled = true;
+            LiveMapButton.IsEnabled = true;
             StatusText.Text = "Connected to Sterling Platform. Live operations active.";
             await RefreshDashboardAsync();
             _refreshTimer.Start();
@@ -57,6 +58,16 @@ public partial class MainWindow : Window
             StatusText.Text = ex.Message;
             LoginButton.IsEnabled = true;
         }
+    }
+
+    private void LiveMapButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_api.IsOwnerSignedIn)
+        {
+            StatusText.Text = "Owner/Founder authentication is required for the live map.";
+            return;
+        }
+        new LiveMapWindow(_api) { Owner = this }.Show();
     }
 
     private void OwnerMenuButton_Click(object sender, RoutedEventArgs e)
