@@ -2,26 +2,19 @@ import argon2 from 'argon2';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db, withTransaction } from './db.js';
-import { requireStaff, requireUser } from './auth.js';
+import { requireStaff } from './auth.js';
 
 type CurrentUser = {
   id: number;
   username: string;
-  password_hash: string;
   role: 'driver' | 'dispatcher' | 'manager' | 'admin' | 'owner';
 };
 
-const changePasswordSchema = z.object({
-  currentPassword: z.string().min(8).max(200),
-  newPassword: z.string().min(12).max(200)
-});
-
 const resetPasswordSchema = z.object({
-  temporaryPassword: z.string().min(12).max(200)
+  password: z.string().min(12).max(200)
 });
 
 const activeSchema = z.object({ isActive: z.boolean() });
-
 const idParams = z.object({ id: z.coerce.number().int().positive() });
 
 function currentUser(request: FastifyRequest): CurrentUser {
@@ -36,101 +29,90 @@ async function revokeAllSessions(connection: any, userId: number) {
 }
 
 export async function registerAccountManagementRoutes(app: FastifyInstance): Promise<void> {
-  app.post('/api/v2/auth/change-password', { preHandler: requireUser }, async (request, reply) => {
-    const parsed = changePasswordSchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: 'invalid_password_change' });
-
-    const user = currentUser(request);
-    const valid = await argon2.verify(user.password_hash, parsed.data.currentPassword).catch(() => false);
-    if (!valid) return reply.code(401).send({ error: 'current_password_incorrect' });
-
-    const same = await argon2.verify(user.password_hash, parsed.data.newPassword).catch(() => false);
-    if (same) return reply.code(400).send({ error: 'new_password_must_differ' });
-
-    const passwordHash = await argon2.hash(parsed.data.newPassword, { type: argon2.argon2id });
-
-    await withTransaction(async (connection) => {
-      await connection.execute(
-        `UPDATE users
-            SET password_hash = ?, must_change_password = 0, token_version = token_version + 1
-          WHERE id = ?`,
-        [passwordHash, user.id]
-      );
-      await revokeAllSessions(connection, user.id);
-      await connection.execute(
-        `INSERT INTO audit_events (actor_user_id, target_user_id, event_type, entity_type, entity_id)
-         VALUES (?, ?, 'auth.password_changed', 'user', ?)`,
-        [user.id, user.id, String(user.id)]
-      );
-    });
-
-    return { ok: true, reloginRequired: true };
-  });
-
-  app.get('/api/v2/staff/drivers', { preHandler: requireStaff(['dispatcher', 'manager', 'admin', 'owner']) }, async () => {
+  // Driver passwords are Owner/Founder controlled. There is deliberately no
+  // self-service change-password route in Platform V2.
+  app.get('/api/v2/owner/drivers', { preHandler: requireStaff(['owner']) }, async () => {
     const [rows] = await db.query<any[]>(
       `SELECT id, username, display_name AS displayName, role, rank_name AS rankName,
-              is_active AS isActive, must_change_password AS mustChangePassword, created_at AS createdAt
+              is_active AS isActive, created_at AS createdAt, updated_at AS updatedAt
          FROM users
-        WHERE role = 'driver'
-        ORDER BY display_name, id`
+        WHERE role IN ('driver','owner')
+        ORDER BY CASE WHEN role = 'owner' THEN 0 ELSE 1 END, display_name, id`
     );
-    return { drivers: rows.map((row) => ({ ...row, isActive: Boolean(row.isActive), mustChangePassword: Boolean(row.mustChangePassword) })) };
+    return { drivers: rows.map((row) => ({ ...row, isActive: Boolean(row.isActive) })) };
   });
 
-  app.post('/api/v2/staff/drivers/:id/reset-password', { preHandler: requireStaff(['manager', 'admin', 'owner']) }, async (request, reply) => {
+  app.post('/api/v2/owner/drivers/:id/set-password', { preHandler: requireStaff(['owner']) }, async (request, reply) => {
     const params = idParams.safeParse(request.params);
     const body = resetPasswordSchema.safeParse(request.body);
     if (!params.success || !body.success) return reply.code(400).send({ error: 'invalid_request' });
 
     const actor = currentUser(request);
-    const passwordHash = await argon2.hash(body.data.temporaryPassword, { type: argon2.argon2id });
+    const passwordHash = await argon2.hash(body.data.password, { type: argon2.argon2id });
 
     const changed = await withTransaction(async (connection) => {
-      const [result] = await connection.execute<any>(
+      const [targetRows] = await connection.query<any[]>(
+        `SELECT id, role FROM users WHERE id = ? LIMIT 1 FOR UPDATE`,
+        [params.data.id]
+      );
+      const target = targetRows[0];
+      if (!target) return 'missing';
+      if (target.role === 'owner' && target.id !== actor.id) return 'protected_owner';
+
+      await connection.execute(
         `UPDATE users
-            SET password_hash = ?, must_change_password = 1, token_version = token_version + 1
-          WHERE id = ? AND role = 'driver'`,
+            SET password_hash = ?, must_change_password = 0, token_version = token_version + 1
+          WHERE id = ?`,
         [passwordHash, params.data.id]
       );
-      if (result.affectedRows !== 1) return false;
       await revokeAllSessions(connection, params.data.id);
       await connection.execute(
         `INSERT INTO audit_events (actor_user_id, target_user_id, event_type, entity_type, entity_id)
-         VALUES (?, ?, 'driver.password_reset', 'user', ?)`,
+         VALUES (?, ?, 'owner.password_set', 'user', ?)`,
         [actor.id, params.data.id, String(params.data.id)]
       );
-      return true;
+      return 'ok';
     });
 
-    if (!changed) return reply.code(404).send({ error: 'driver_not_found' });
-    return { ok: true };
+    if (changed === 'missing') return reply.code(404).send({ error: 'driver_not_found' });
+    if (changed === 'protected_owner') return reply.code(403).send({ error: 'owner_account_protected' });
+    return { ok: true, reloginRequired: true };
   });
 
-  app.patch('/api/v2/staff/drivers/:id/active', { preHandler: requireStaff(['manager', 'admin', 'owner']) }, async (request, reply) => {
+  app.patch('/api/v2/owner/drivers/:id/active', { preHandler: requireStaff(['owner']) }, async (request, reply) => {
     const params = idParams.safeParse(request.params);
     const body = activeSchema.safeParse(request.body);
     if (!params.success || !body.success) return reply.code(400).send({ error: 'invalid_request' });
 
     const actor = currentUser(request);
+    if (params.data.id === actor.id && !body.data.isActive) {
+      return reply.code(400).send({ error: 'cannot_disable_current_owner' });
+    }
+
     const changed = await withTransaction(async (connection) => {
-      const [result] = await connection.execute<any>(
-        `UPDATE users
-            SET is_active = ?, token_version = token_version + 1
-          WHERE id = ? AND role = 'driver'`,
+      const [targetRows] = await connection.query<any[]>(
+        `SELECT id, role FROM users WHERE id = ? LIMIT 1 FOR UPDATE`,
+        [params.data.id]
+      );
+      const target = targetRows[0];
+      if (!target) return 'missing';
+      if (target.role === 'owner') return 'protected_owner';
+
+      await connection.execute(
+        `UPDATE users SET is_active = ?, token_version = token_version + 1 WHERE id = ?`,
         [body.data.isActive ? 1 : 0, params.data.id]
       );
-      if (result.affectedRows !== 1) return false;
       if (!body.data.isActive) await revokeAllSessions(connection, params.data.id);
       await connection.execute(
         `INSERT INTO audit_events (actor_user_id, target_user_id, event_type, entity_type, entity_id, metadata)
          VALUES (?, ?, ?, 'user', ?, JSON_OBJECT('isActive', ?))`,
         [actor.id, params.data.id, body.data.isActive ? 'driver.enabled' : 'driver.disabled', String(params.data.id), body.data.isActive]
       );
-      return true;
+      return 'ok';
     });
 
-    if (!changed) return reply.code(404).send({ error: 'driver_not_found' });
+    if (changed === 'missing') return reply.code(404).send({ error: 'driver_not_found' });
+    if (changed === 'protected_owner') return reply.code(403).send({ error: 'owner_account_protected' });
     return { ok: true, isActive: body.data.isActive };
   });
 }
