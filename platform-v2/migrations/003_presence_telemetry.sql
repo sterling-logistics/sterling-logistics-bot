@@ -1,0 +1,43 @@
+CREATE TABLE driver_presence (
+  user_id BIGINT UNSIGNED NOT NULL,
+  tracker_version VARCHAR(40) NULL,
+  game ENUM('ets2','ats') NULL,
+  game_running TINYINT(1) NOT NULL DEFAULT 0,
+  on_job TINYINT(1) NOT NULL DEFAULT 0,
+  status VARCHAR(40) NOT NULL DEFAULT 'online',
+  last_seen_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  last_login_at DATETIME(3) NULL,
+  latitude DECIMAL(10,7) NULL,
+  longitude DECIMAL(10,7) NULL,
+  heading_deg DECIMAL(7,3) NULL,
+  speed_kph DECIMAL(8,2) NULL,
+  city VARCHAR(120) NULL,
+  truck_make VARCHAR(80) NULL,
+  truck_model VARCHAR(120) NULL,
+  cargo VARCHAR(160) NULL,
+  origin_city VARCHAR(120) NULL,
+  destination_city VARCHAR(120) NULL,
+  fuel_percent DECIMAL(6,2) NULL,
+  damage_percent DECIMAL(6,2) NULL,
+  fines_total DECIMAL(15,2) NULL,
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (user_id),
+  KEY idx_presence_last_seen (last_seen_at),
+  KEY idx_presence_game_job (game_running, on_job, last_seen_at),
+  CONSTRAINT fk_presence_user FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE telemetry_events (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  job_id BIGINT UNSIGNED NULL,
+  event_type VARCHAR(80) NOT NULL,
+  game ENUM('ets2','ats') NULL,
+  payload JSON NULL,
+  recorded_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  KEY idx_telemetry_user_recorded (user_id, recorded_at),
+  KEY idx_telemetry_job_recorded (job_id, recorded_at),
+  CONSTRAINT fk_telemetry_user FOREIGN KEY (user_id) REFERENCES users(id),
+  CONSTRAINT fk_telemetry_job FOREIGN KEY (job_id) REFERENCES jobs(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
