@@ -1,0 +1,4 @@
+[submodule "platform-v2/vendor/scs-sdk-plugin"]
+	path = platform-v2/vendor/scs-sdk-plugin
+	url = https://github.com/RenCloud/scs-sdk-plugin.git
+	branch = master
