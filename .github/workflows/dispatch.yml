@@ -41,7 +41,7 @@ jobs:
         shell: pwsh
         run: dotnet restore .\tracker-v3\src\SterlingDispatch\SterlingDispatch.csproj -r win-x64
 
-      - name: Publish Sterling Dispatch 1.0.3
+      - name: Publish Sterling Dispatch 1.0.4
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
@@ -84,7 +84,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path .\tracker-v3\dist | Out-Null
           & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' .\tracker-v3\installer\SterlingDispatch.iss
           if($LASTEXITCODE -ne 0){throw 'Inno Setup failed'}
-          $installer='.\tracker-v3\dist\SterlingDispatch-1.0.3-Setup.exe'
+          $installer='.\tracker-v3\dist\SterlingDispatch-1.0.4-Setup.exe'
           if(-not (Test-Path $installer)){throw 'Sterling Dispatch installer was not created'}
           if((Get-Item $installer).Length -lt 1000000){throw 'Installer is unexpectedly small'}
           Copy-Item $installer '.\tracker-v3\dist\SterlingDispatch-Latest-Setup.exe' -Force
@@ -93,9 +93,9 @@ jobs:
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DOWNLOAD-Sterling-Dispatch-1.0.3
+          name: DOWNLOAD-Sterling-Dispatch-1.0.4
           path: |
-            tracker-v3/dist/SterlingDispatch-1.0.3-Setup.exe
+            tracker-v3/dist/SterlingDispatch-1.0.4-Setup.exe
             tracker-v3/dist/SterlingDispatch-Latest-Setup.exe
           if-no-files-found: error
           retention-days: 30
@@ -108,11 +108,11 @@ jobs:
         run: |
           $ErrorActionPreference='Stop'
           $tag='dispatch-latest'
-          $installer='.\tracker-v3\dist\SterlingDispatch-1.0.3-Setup.exe'
+          $installer='.\tracker-v3\dist\SterlingDispatch-1.0.4-Setup.exe'
           $latest='.\tracker-v3\dist\SterlingDispatch-Latest-Setup.exe'
           gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
           if($LASTEXITCODE -ne 0){
-            gh release create $tag $installer $latest --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title 'Sterling Dispatch 1.0.3' --notes 'Adds searchable cargo and location selectors for professional dispatch job creation, backed by Sterling history plus built-in ETS2/ATS locations and cargo.'
+            gh release create $tag $installer $latest --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title 'Sterling Dispatch 1.0.4' --notes 'Adds full dispatch, approval and payout history filters so completed jobs remain visible and staff can audit the complete workflow.'
             if($LASTEXITCODE -ne 0){throw 'Could not create Dispatch release'}
           }else{
             gh release upload $tag $installer $latest --repo $env:GITHUB_REPOSITORY --clobber
