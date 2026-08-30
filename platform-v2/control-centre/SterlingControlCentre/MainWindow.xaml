@@ -18,7 +18,7 @@
      <Button Content="Payments" Height="42" Margin="0,0,0,8"/>
      <Button Content="Finance" Height="42" Margin="0,0,0,8"/>
      <Button Content="Audit Logs" Height="42" Margin="0,0,0,8"/>
-     <Button Content="Owner Menu" Height="42" Margin="0,0,0,8"/>
+     <Button x:Name="OwnerMenuButton" Content="Owner Menu" Height="42" Margin="0,0,0,8" IsEnabled="False" Click="OwnerMenuButton_Click"/>
     </StackPanel>
     <StackPanel DockPanel.Dock="Bottom" VerticalAlignment="Bottom">
      <TextBlock x:Name="OwnerNameText" Text="Not signed in" Foreground="White" FontWeight="SemiBold"/>
