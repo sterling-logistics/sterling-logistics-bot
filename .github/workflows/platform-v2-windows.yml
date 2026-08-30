@@ -1,0 +1,39 @@
+name: Sterling Platform V2 Windows CI
+
+on:
+  push:
+    branches:
+      - platform-2.0
+    paths:
+      - 'platform-v2/tracker/**'
+      - 'platform-v2/control-centre/**'
+      - '.github/workflows/platform-v2-windows.yml'
+  pull_request:
+    paths:
+      - 'platform-v2/tracker/**'
+      - 'platform-v2/control-centre/**'
+      - '.github/workflows/platform-v2-windows.yml'
+
+jobs:
+  tracker:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore Tracker
+        run: dotnet restore platform-v2/tracker/SterlingTracker/SterlingTracker.csproj
+      - name: Build Tracker
+        run: dotnet build platform-v2/tracker/SterlingTracker/SterlingTracker.csproj --configuration Release --no-restore
+
+  control-centre:
+    runs-on: windows-latest
+    if: ${{ hashFiles('platform-v2/control-centre/**/*.csproj') != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build Control Centre
+        run: dotnet build platform-v2/control-centre/SterlingControlCentre/SterlingControlCentre.csproj --configuration Release
