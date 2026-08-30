@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.Json;
 
 namespace Sterling.Logistics.Tracker.Services;
@@ -58,7 +59,7 @@ public sealed class PayoutJournal
             }
             catch
             {
-                // Corrupt journal files are deliberately retained for manual recovery.
+                // Corrupt journal files are retained for manual recovery.
             }
         }
         return result.OrderBy(x => x.CreatedAt).ToList();
