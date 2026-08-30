@@ -8,6 +8,7 @@ const runtime=read("src/approvals/runtime.js");
 const manual=read("src/manualjobs/runtime.js");
 const index=read("src/index.js");
 
+const approvalRuntimeLoads=index.includes('import "./approvals/runtime.js"')||index.includes('import("./approvals/runtime.js")');
 const checks=[
   [telemetry.includes("queueTrackedJobForApproval"),"tracker delivery is queued for approval"],
   [!telemetry.includes("settleCompletedLoad"),"tracker telemetry does not pay immediately"],
@@ -19,7 +20,7 @@ const checks=[
   [approvals.includes("processDriverProgression"),"approval runs driver progression"],
   [runtime.includes('setName("jobapprovals")')&&runtime.includes('setName("jobdecision")'),"management approval commands are registered"],
   [manual.includes("pending_review")&&manual.includes("settleCompletedLoad"),"manual fallback also requires approval before pay"],
-  [index.includes('import "./approvals/runtime.js"'),"approval runtime loads on bot startup"]
+  [approvalRuntimeLoads,"approval runtime loads on bot startup"]
 ];
 
 let failed=false;
