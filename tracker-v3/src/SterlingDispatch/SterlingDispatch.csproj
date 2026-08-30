@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>SterlingDispatch</AssemblyName>
+    <RootNamespace>SterlingTracker</RootNamespace>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <ApplicationManifest>..\SterlingTracker\app.manifest</ApplicationManifest>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\SterlingTracker\CompatibilityInfo.cs" Link="Shared\CompatibilityInfo.cs" />
+    <Compile Include="..\SterlingTracker\Ets2PayoutService.cs" Link="Shared\Ets2PayoutService.cs" />
+    <Compile Include="..\SterlingTracker\LocalState.cs" Link="Shared\LocalState.cs" />
+    <Compile Include="..\SterlingTracker\MainForm.cs" Link="Shared\MainForm.cs" />
+    <Compile Include="..\SterlingTracker\SterlingApiClient.cs" Link="Shared\SterlingApiClient.cs" />
+    <Compile Include="..\SterlingTracker\TelemetryService.cs" Link="Shared\TelemetryService.cs" />
+    <Compile Include="..\SterlingTracker\TrackerModels.cs" Link="Shared\TrackerModels.cs" />
+  </ItemGroup>
+</Project>
