@@ -3,6 +3,15 @@ import {ensureDispatchSchema} from "./schema.js";
 import {ensureApprovalSchema,reviewTrackedApproval} from "../approvals/service.js";
 import {ensureEconomySchema} from "../economy/service.js";
 
+const DEFAULT_CARGO=[
+  "Apples","Beverages","Building Materials","Cars","Cement","Chemicals","Clothing","Computer Processors","Concrete Beams","Containers","Dairy Products","Diesel","Electronics","Empty Pallets","Excavator","Fertilizer","Food Products","Furniture","Gasoline","Glass Panels","Grain","Heavy Machinery","Home Accessories","Iron Pipes","Logs","Machinery Parts","Medical Equipment","Metal Beams","Motorcycles","Paper","Plastics","Potatoes","Refrigerated Food","Roof Tiles","Salt","Sand","Steel","Steel Pipes","Sugar","Timber","Tractors","Transformers","Tyres","Used Packaging","Vegetables","Wood Shavings"
+];
+
+const DEFAULT_LOCATIONS=[
+  "Aberdeen","Amsterdam","Antwerp","Barcelona","Berlin","Bern","Birmingham","Bologna","Bordeaux","Bratislava","Bremen","Brno","Brussels","Budapest","Calais","Cardiff","Cologne","Copenhagen","Dijon","Dortmund","Dover","Dresden","Duisburg","Edinburgh","Erfurt","Felixstowe","Frankfurt","Gdansk","Geneva","Glasgow","Gothenburg","Graz","Hamburg","Hannover","Helsinki","Innsbruck","Istanbul","Kassel","Katowice","Kiel","Klagenfurt","Krakow","Le Havre","Leipzig","Liege","Lille","Linz","Lisbon","Liverpool","London","Luxembourg","Lyon","Madrid","Magdeburg","Malmo","Manchester","Mannheim","Marseille","Metz","Milan","Munich","Nantes","Newcastle","Nice","Nuremberg","Odense","Oslo","Paris","Plymouth","Poznan","Prague","Reims","Rennes","Rostock","Rotterdam","Salzburg","Sheffield","Sofia","Stockholm","Strasbourg","Stuttgart","Swansea","Tallinn","Toulouse","Turin","Valencia","Venice","Vienna","Vilnius","Warsaw","Wroclaw","Zurich",
+  "Albuquerque","Bakersfield","Boise","Cheyenne","Denver","Elko","Flagstaff","Fresno","Grand Junction","Las Vegas","Los Angeles","Phoenix","Portland","Reno","Sacramento","Salt Lake City","San Diego","San Francisco","Seattle","Spokane","Tacoma","Tucson","Yuma"
+];
+
 async function dispatchAuth(req,trackerAuth){
   const d=await trackerAuth(req);if(!d)return null;
   const[rows]=await db().execute("SELECT id,sterling_driver_id,discord_id,discord_username,rank_name,department,status FROM drivers WHERE id=? LIMIT 1",[d.driver_id]);
@@ -97,6 +106,21 @@ export function registerDispatchStaffRoutes(app,trackerAuth,{includeAssignments=
     }catch(e){res.status(500).json({ok:false,error:"Could not load drivers"});}
   });
 
+  app.get("/api/dispatch/catalog",async(req,res)=>{
+    try{
+      const staff=await requireDispatch(req,res,trackerAuth);if(!staff)return;
+      const cargo=new Set(DEFAULT_CARGO),locations=new Set(DEFAULT_LOCATIONS);
+      try{
+        const[cargoRows]=await db().query("SELECT cargo FROM work_assignments WHERE cargo IS NOT NULL AND cargo<>'' UNION SELECT cargo FROM tracked_job_approvals WHERE cargo IS NOT NULL AND cargo<>'' LIMIT 500");
+        for(const row of cargoRows){const v=String(row.cargo||'').trim();if(v)cargo.add(v);}
+        const[locationRows]=await db().query("SELECT origin_city AS city FROM work_assignments WHERE origin_city IS NOT NULL AND origin_city<>'' UNION SELECT destination_city AS city FROM work_assignments WHERE destination_city IS NOT NULL AND destination_city<>'' UNION SELECT origin_city AS city FROM tracked_job_approvals WHERE origin_city IS NOT NULL AND origin_city<>'' UNION SELECT destination_city AS city FROM tracked_job_approvals WHERE destination_city IS NOT NULL AND destination_city<>'' LIMIT 1000");
+        for(const row of locationRows){const v=String(row.city||'').trim();if(v)locations.add(v);}
+      }catch(e){console.warn("[Dispatch Catalog] Using built-in catalog only:",e.message||e);}
+      const sort=(a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'});
+      res.setHeader("Cache-Control","no-store");res.json({ok:true,cargo:[...cargo].sort(sort),locations:[...locations].sort(sort)});
+    }catch(e){res.status(500).json({ok:false,error:"Could not load dispatch cargo/location catalog"});}
+  });
+
   app.get("/api/dispatch/assignments",async(req,res)=>{
     try{
       const staff=await requireDispatch(req,res,trackerAuth);if(!staff)return;
@@ -116,6 +140,7 @@ export function registerDispatchStaffRoutes(app,trackerAuth,{includeAssignments=
       const driverId=Number(req.body?.driverId||0),cargo=String(req.body?.cargo||"").trim(),origin=String(req.body?.origin||"").trim(),destination=String(req.body?.destination||"").trim();
       const minMiles=Math.max(0,Number(req.body?.minMiles||0)),notes=String(req.body?.notes||"").trim().slice(0,2000)||null;
       if(!driverId||!cargo||!origin||!destination)return res.status(400).json({ok:false,error:"Driver, cargo, origin and destination are required"});
+      if(origin.toLowerCase()===destination.toLowerCase())return res.status(400).json({ok:false,error:"Origin and destination must be different"});
       const[driverRows]=await db().execute("SELECT id,sterling_driver_id,discord_id FROM drivers WHERE id=? AND status='active' LIMIT 1",[driverId]);
       if(!driverRows[0])return res.status(404).json({ok:false,error:"Active Sterling driver not found"});
       let deadline=null;if(req.body?.deadline){const d=new Date(req.body.deadline);if(Number.isNaN(d.getTime()))return res.status(400).json({ok:false,error:"Deadline is not a valid date/time"});deadline=d;}
