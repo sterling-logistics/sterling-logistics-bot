@@ -7,7 +7,7 @@ import { db, withTransaction } from './db.js';
 
 export type Role = 'driver' | 'dispatcher' | 'manager' | 'admin' | 'owner';
 
-type UserRow = {
+export type UserRow = {
   id: number;
   username: string;
   password_hash: string;
@@ -28,7 +28,7 @@ const refreshSchema = z.object({ refreshToken: z.string().min(40) });
 
 const createDriverSchema = z.object({
   username: z.string().trim().toLowerCase().regex(/^[a-z0-9._-]{3,40}$/),
-  temporaryPassword: z.string().min(12).max(200),
+  password: z.string().min(12).max(200),
   displayName: z.string().trim().min(2).max(100),
   rankName: z.string().trim().min(2).max(80).default('Driver')
 });
@@ -37,14 +37,13 @@ function hashOpaqueToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
-function publicUser(user: UserRow) {
+export function publicUser(user: UserRow) {
   return {
     id: user.id,
     username: user.username,
     displayName: user.display_name,
     role: user.role,
-    rankName: user.rank_name,
-    mustChangePassword: Boolean(user.must_change_password)
+    rankName: user.rank_name
   };
 }
 
@@ -105,19 +104,17 @@ export async function requireUser(request: FastifyRequest, reply: FastifyReply):
   }
 }
 
-export function requireStaff(minimum: Role[] = ['dispatcher', 'manager', 'admin', 'owner']) {
+export function requireStaff(roles: Role[] = ['dispatcher', 'manager', 'admin', 'owner']) {
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     await requireUser(request, reply);
     if (reply.sent) return;
     const user = (request as any).sterlingUser as UserRow;
-    if (!minimum.includes(user.role)) {
-      return void reply.code(403).send({ error: 'forbidden' });
-    }
+    if (!roles.includes(user.role)) return void reply.code(403).send({ error: 'forbidden' });
   };
 }
 
 export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
-  app.post('/api/v2/auth/login', async (request, reply) => {
+  app.post('/api/v2/auth/login', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request, reply) => {
     const parsed = loginSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_credentials' });
 
@@ -157,7 +154,6 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       if (!row || !row.is_active) return null;
 
       await connection.execute(`UPDATE refresh_sessions SET revoked_at = NOW(3), last_used_at = NOW(3) WHERE id = ?`, [row.session_id]);
-
       const raw = randomBytes(48).toString('base64url');
       const newHash = hashOpaqueToken(raw);
       const newId = randomUUID();
@@ -171,11 +167,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     });
 
     if (!result) return reply.code(401).send({ error: 'invalid_refresh_token' });
-    return {
-      accessToken: issueAccessToken(app, result.user),
-      refreshToken: result.refreshToken,
-      user: publicUser(result.user)
-    };
+    return { accessToken: issueAccessToken(app, result.user), refreshToken: result.refreshToken, user: publicUser(result.user) };
   });
 
   app.post('/api/v2/auth/logout', { preHandler: requireUser }, async (request) => {
@@ -190,17 +182,17 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     return { user: publicUser((request as any).sterlingUser as UserRow) };
   });
 
-  app.post('/api/v2/staff/drivers', { preHandler: requireStaff(['manager', 'admin', 'owner']) }, async (request, reply) => {
+  app.post('/api/v2/owner/drivers', { preHandler: requireStaff(['owner']) }, async (request, reply) => {
     const parsed = createDriverSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_driver', details: parsed.error.flatten() });
 
     const actor = (request as any).sterlingUser as UserRow;
-    const passwordHash = await argon2.hash(parsed.data.temporaryPassword, { type: argon2.argon2id });
+    const passwordHash = await argon2.hash(parsed.data.password, { type: argon2.argon2id });
 
     try {
       const [result] = await db.execute<any>(
         `INSERT INTO users (username, password_hash, display_name, role, rank_name, must_change_password)
-         VALUES (?, ?, ?, 'driver', ?, 1)`,
+         VALUES (?, ?, ?, 'driver', ?, 0)`,
         [parsed.data.username, passwordHash, parsed.data.displayName, parsed.data.rankName]
       );
       const driverId = Number(result.insertId);
