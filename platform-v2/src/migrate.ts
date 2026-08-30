@@ -4,6 +4,8 @@ import { resolve } from 'node:path';
 import mysql from 'mysql2/promise';
 import { config } from './config.js';
 
+const JOURNAL_TABLE = 'platform_v2_migrations';
+
 async function main() {
   const migrationsDir = resolve(process.cwd(), 'migrations');
   const files = (await readdir(migrationsDir))
@@ -20,7 +22,7 @@ async function main() {
 
   try {
     await connection.query(`
-      CREATE TABLE IF NOT EXISTS schema_migrations (
+      CREATE TABLE IF NOT EXISTS ${JOURNAL_TABLE} (
         filename VARCHAR(255) NOT NULL PRIMARY KEY,
         checksum CHAR(64) NOT NULL,
         applied_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
@@ -31,7 +33,7 @@ async function main() {
       const sql = await readFile(resolve(migrationsDir, filename), 'utf8');
       const checksum = createHash('sha256').update(sql).digest('hex');
       const [rows] = await connection.query<any[]>(
-        'SELECT checksum FROM schema_migrations WHERE filename = ? LIMIT 1',
+        `SELECT checksum FROM ${JOURNAL_TABLE} WHERE filename = ? LIMIT 1`,
         [filename]
       );
 
@@ -48,7 +50,7 @@ async function main() {
       try {
         await connection.query(sql);
         await connection.execute(
-          'INSERT INTO schema_migrations (filename, checksum) VALUES (?, ?)',
+          `INSERT INTO ${JOURNAL_TABLE} (filename, checksum) VALUES (?, ?)`,
           [filename, checksum]
         );
         await connection.commit();
