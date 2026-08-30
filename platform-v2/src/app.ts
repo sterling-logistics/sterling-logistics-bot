@@ -3,15 +3,26 @@ import helmet from '@fastify/helmet';
 import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
 import Fastify from 'fastify';
+import { registerAccountManagementRoutes } from './account-management.js';
 import { registerAuthRoutes } from './auth.js';
 import { config } from './config.js';
 import { pingDatabase } from './db.js';
+import { registerJobRoutes } from './jobs.js';
+import { registerPayoutRoutes } from './payouts.js';
 
 export async function buildApp() {
   const app = Fastify({
     logger: {
       level: config.NODE_ENV === 'production' ? 'info' : 'debug',
-      redact: ['req.headers.authorization', 'body.password', 'body.temporaryPassword', 'body.refreshToken']
+      redact: [
+        'req.headers.authorization',
+        'body.password',
+        'body.currentPassword',
+        'body.newPassword',
+        'body.temporaryPassword',
+        'body.refreshToken',
+        'body.leaseToken'
+      ]
     },
     trustProxy: true
   });
@@ -32,10 +43,13 @@ export async function buildApp() {
   app.get('/api/v2/health', async (_request, reply) => {
     const database = await pingDatabase().catch(() => false);
     if (!database) return reply.code(503).send({ status: 'degraded', database: 'down' });
-    return { status: 'ok', database: 'up', version: '2.0.0-alpha.1' };
+    return { status: 'ok', database: 'up', version: '2.0.0-alpha.2' };
   });
 
   await registerAuthRoutes(app);
+  await registerAccountManagementRoutes(app);
+  await registerJobRoutes(app);
+  await registerPayoutRoutes(app);
 
   app.setNotFoundHandler((_request, reply) => {
     reply.code(404).send({ error: 'not_found' });
