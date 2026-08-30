@@ -1,11 +1,13 @@
-import {ActionRowBuilder,ButtonBuilder,ButtonStyle,Client,EmbedBuilder,Events} from "discord.js";
+import {ActionRowBuilder,ButtonBuilder,ButtonStyle,ChannelType,Client,EmbedBuilder,Events} from "discord.js";
 import {handleJobApprovalButton} from "../telemetry/events.js";
 import {db} from "../database/mysql.js";
 import {ensureApprovalSchema} from "../approvals/service.js";
 import {loadConfig} from "../config.js";
 
-const JOB_LOGS_CHANNEL_ID="1537243424707710996";
+const DEFAULT_JOB_LOGS_CHANNEL_ID="1537243424707710996";
+const JOB_LOGS_CHANNEL_NAME="job-logs";
 let schemaReady=false;
+let resolvedChannelId=null;
 
 async function ensureJobLogSchema(){
   if(schemaReady)return;
@@ -30,13 +32,44 @@ function buttons(code){return [new ActionRowBuilder().addComponents(
   new ButtonBuilder().setCustomId(`sterling_job_decline:${code}`).setLabel("Reject").setEmoji("❌").setStyle(ButtonStyle.Danger)
 )];}
 
+async function resolveJobLogsChannel(guild){
+  const configured=String(process.env.JOB_LOGS_CHANNEL_ID||"").trim();
+  const ids=[configured,resolvedChannelId,DEFAULT_JOB_LOGS_CHANNEL_ID].filter(Boolean);
+  for(const id of [...new Set(ids)]){
+    const ch=await guild.channels.fetch(id).catch(()=>null);
+    if(ch?.isTextBased()){
+      resolvedChannelId=ch.id;
+      return ch;
+    }
+  }
+
+  await guild.channels.fetch().catch(()=>null);
+  const byName=guild.channels.cache.find(ch=>ch?.isTextBased?.()&&String(ch.name||"").toLowerCase()===JOB_LOGS_CHANNEL_NAME);
+  if(byName){
+    resolvedChannelId=byName.id;
+    return byName;
+  }
+
+  try{
+    const created=await guild.channels.create({
+      name:JOB_LOGS_CHANNEL_NAME,
+      type:ChannelType.GuildText,
+      reason:"Sterling Logistics automatic job approval log channel"
+    });
+    resolvedChannelId=created.id;
+    console.log(`[Job Logs] Created replacement #${JOB_LOGS_CHANNEL_NAME} channel ${created.id}`);
+    return created;
+  }catch(e){
+    throw new Error(`Job Logs channel is unavailable and Sterling could not create #${JOB_LOGS_CHANNEL_NAME}: ${String(e.message||e)}`);
+  }
+}
+
 async function postMissingJobLogs(client){
   if(!client.isReady())return;
   await ensureJobLogSchema();
   const c=loadConfig();
   const guild=await client.guilds.fetch(c.guildId);
-  const channel=await guild.channels.fetch(JOB_LOGS_CHANNEL_ID).catch(()=>null);
-  if(!channel?.isTextBased())throw new Error(`Job Logs channel ${JOB_LOGS_CHANNEL_ID} is unavailable`);
+  const channel=await resolveJobLogsChannel(guild);
 
   const[rows]=await db().query(`SELECT a.*,d.discord_id,d.sterling_driver_id,d.discord_username
     FROM tracked_job_approvals a JOIN drivers d ON d.id=a.driver_id
@@ -55,14 +88,19 @@ async function postMissingJobLogs(client){
         {name:"Cargo",value:a.cargo||"Unknown",inline:true},
         {name:"Distance",value:`${Number(a.distance_miles||0).toFixed(1)} mi`,inline:true},
         {name:"Revenue",value:money(a.revenue),inline:true},
-        {name:"Driver Pay (55%)",value:money(a.driver_payment),inline:true},
+        {name:"Driver Pay",value:money(a.driver_payment),inline:true},
         {name:"Damage",value:`${(Number(a.damage||0)*100).toFixed(1)}%`,inline:true},
         {name:"Status",value:"⏳ Awaiting staff decision",inline:false}
       )
       .setTimestamp(new Date(a.created_at))
       .setFooter({text:"Sterling Logistics Job Logs • ✅ approve / ❌ reject"});
-    const msg=await channel.send({embeds:[embed],components:buttons(a.approval_code)});
-    await db().execute("UPDATE tracked_job_approvals SET discord_log_message_id=?,discord_log_channel_id=? WHERE id=? AND (discord_log_message_id IS NULL OR discord_log_message_id='')",[msg.id,channel.id,a.id]);
+    try{
+      const msg=await channel.send({embeds:[embed],components:buttons(a.approval_code)});
+      await db().execute("UPDATE tracked_job_approvals SET discord_log_message_id=?,discord_log_channel_id=? WHERE id=? AND (discord_log_message_id IS NULL OR discord_log_message_id='')",[msg.id,channel.id,a.id]);
+    }catch(e){
+      resolvedChannelId=null;
+      throw e;
+    }
   }
 }
 
@@ -78,7 +116,7 @@ if(!Client.prototype.__sterlingJobLogsPatched){
       });
       this.once(Events.ClientReady,()=>{
         const run=()=>postMissingJobLogs(this).catch(e=>console.error("[Job Logs] posting",e));
-        setTimeout(run,12000);
+        setTimeout(run,8000);
         setInterval(run,10000);
       });
     }
