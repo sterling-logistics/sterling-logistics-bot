@@ -12,6 +12,7 @@ if(trackerApiOnly){
   await import("./roles/runtime.js");
   await import("./discordadmin/runtime.js");
   await import("./driverhistory/runtime.js");
+  await import("./dispatch/staff-auth-runtime.js");
   await import("./index-oauth.js");
   await import("./maintenance/reset-vtc-once-startup.js");
 }
