@@ -7,6 +7,7 @@ import {initDatabase,pingDatabase,ensureSchema,db} from "./database/mysql.js";
 import {ensureEconomySchema,getPendingEts2Payout,completeEts2Payout,failEts2Payout} from "./economy/service.js";
 import {ensureDispatchSchema} from "./dispatch/schema.js";
 import {syncDispatchFromTelemetry} from "./dispatch/service.js";
+import {ensureDispatchStaffApiSchema,registerDispatchStaffRoutes} from "./dispatch/staff-api.js";
 import {registerDesktopAuthRoutes,authenticateDesktopSession} from "./auth/desktop.js";
 import {authenticateTracker,ingestTrackerTelemetry,ingestTelemetry} from "./telemetry/service.js";
 import {persistTrackerJobEvent} from "./jobs/persistence.js";
@@ -46,10 +47,12 @@ async function requireDispatch(req,res){
   return staff;
 }
 
+registerDispatchStaffRoutes(app,trackerAuth,{includeAssignments:false});
+
 app.get("/health",async(_req,res)=>{
   try{
     const d=await pingDatabase();
-    res.json({ok:true,mode:"tracker-api-only",discord:false,database:d.db,schemaReady,desktopLogin:Boolean(c.discordClientSecret&&c.applicationId),dispatchApi:true});
+    res.json({ok:true,mode:"tracker-api-only",discord:false,database:d.db,schemaReady,desktopLogin:Boolean(c.discordClientSecret&&c.applicationId),dispatchApi:true,staffJobApprovals:true,staffPayouts:true});
   }catch(e){res.status(500).json({ok:false,error:String(e.message||e)});}
 });
 
@@ -186,9 +189,9 @@ app.listen(c.port,"0.0.0.0",()=>console.log(`[Tracker API] Listening on ${c.port
 (async()=>{
   try{
     const d=await pingDatabase();console.log(`[DB] Connected to ${d.db} as ${d.username}`);
-    await ensureSchema();await ensureDispatchSchema();await ensureEconomySchema();
+    await ensureSchema();await ensureDispatchSchema();await ensureEconomySchema();await ensureDispatchStaffApiSchema();
     schemaReady=true;
     console.log("[DB] MySQL schema ready");
-    console.log("[Sterling] Tracker API-only host ready • Discord bot login disabled");
+    console.log("[Sterling] Tracker API-only host ready • Dispatch approvals + payouts enabled");
   }catch(e){schemaReady=false;console.error("[Tracker API Startup]",e);}
 })();
