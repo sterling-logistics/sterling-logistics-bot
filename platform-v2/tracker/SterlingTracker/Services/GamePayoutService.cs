@@ -13,30 +13,44 @@ public sealed class GamePayoutService
 
     public GamePayoutService(PayoutJournal journal) => _journal = journal;
 
-    public GamePayoutApplyResult Apply(PayoutClaim claim)
+    public GamePayoutApplyResult Apply(PayoutClaim claim, PayoutJournalEntry? existing = null)
     {
         if (claim.Amount <= 0) throw new InvalidOperationException("Payout amount must be greater than zero.");
+        if (decimal.Truncate(claim.Amount) != claim.Amount)
+            throw new InvalidOperationException("Game payouts must be whole currency units so Sterling can verify the exact game balance.");
         if (IsGameRunning(claim.Game))
             throw new PayoutDeferredException("Sterling will apply the payment at the next safe save point after the game closes.");
 
-        var save = FindLatestSave(claim.Game)
-                   ?? throw new PayoutDeferredException($"No {claim.Game.ToUpperInvariant()} game.sii save was found yet.");
+        var save = ResolveSave(claim.Game, existing);
         EnsureStable(save);
-
         var original = File.ReadAllText(save.FullName, Encoding.UTF8);
+        var beforeNow = ParseBalance(original);
+
+        if (existing is not null)
+        {
+            var expected = checked(existing.BalanceBefore + claim.Amount);
+            if (beforeNow == expected)
+            {
+                var reconciled = _journal.MarkApplied(existing, beforeNow);
+                return new GamePayoutApplyResult(reconciled, existing.BalanceBefore, beforeNow, save.FullName, existing.BackupPath ?? string.Empty);
+            }
+            if (beforeNow != existing.BalanceBefore)
+                throw new PayoutDeferredException("Sterling detected a balance change during payout recovery. The payment has been paused for Owner review instead of risking a duplicate.");
+        }
+
+        var before = existing?.BalanceBefore ?? beforeNow;
+        var after = checked(before + claim.Amount);
+        var journal = existing ?? _journal.Create(claim, save.FullName, before);
+
+        var backup = journal.BackupPath;
+        if (string.IsNullOrWhiteSpace(backup) || !File.Exists(backup))
+        {
+            backup = save.FullName + $".sterling-backup-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{claim.Id:N}";
+            File.Copy(save.FullName, backup, overwrite: false);
+            journal = _journal.MarkBackupCreated(journal, backup);
+        }
+
         var match = MoneyRegex.Match(original);
-        if (!match.Success)
-            throw new PayoutDeferredException("Sterling cannot safely edit this save yet. Set g_save_format to 2 in the game config and create a fresh save.");
-
-        var before = decimal.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture);
-        var increment = decimal.Truncate(claim.Amount);
-        var after = checked(before + increment);
-        var journal = _journal.Create(claim, save.FullName, before);
-
-        var backup = save.FullName + $".sterling-backup-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{claim.Id:N}";
-        File.Copy(save.FullName, backup, overwrite: false);
-        journal = _journal.MarkBackupCreated(journal, backup);
-
         var replacement = $"{match.Groups[1].Value}money_account: {after.ToString(CultureInfo.InvariantCulture)}";
         var updated = MoneyRegex.Replace(original, replacement, 1);
         var temp = save.FullName + $".sterling-{claim.Id:N}.tmp";
@@ -44,8 +58,8 @@ public sealed class GamePayoutService
         File.Move(temp, save.FullName, overwrite: true);
 
         var verify = File.ReadAllText(save.FullName, Encoding.UTF8);
-        var verifyMatch = MoneyRegex.Match(verify);
-        if (!verifyMatch.Success || !decimal.TryParse(verifyMatch.Groups[2].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var verified) || verified != after)
+        var verified = ParseBalance(verify);
+        if (verified != after)
         {
             TryRestore(backup, save.FullName);
             _journal.MarkFailed(journal, "Balance verification failed after write; backup restored.");
@@ -55,6 +69,9 @@ public sealed class GamePayoutService
         journal = _journal.MarkApplied(journal, verified);
         return new GamePayoutApplyResult(journal, before, verified, save.FullName, backup);
     }
+
+    public static decimal ReadBalance(string savePath)
+        => ParseBalance(File.ReadAllText(savePath, Encoding.UTF8));
 
     public static FileInfo? FindLatestSave(string game)
     {
@@ -82,6 +99,20 @@ public sealed class GamePayoutService
             }
         }
         return candidates.Where(x => x.Exists).OrderByDescending(x => x.LastWriteTimeUtc).FirstOrDefault();
+    }
+
+    private static FileInfo ResolveSave(string game, PayoutJournalEntry? existing)
+    {
+        if (existing is not null && File.Exists(existing.ProfilePath)) return new FileInfo(existing.ProfilePath);
+        return FindLatestSave(game) ?? throw new PayoutDeferredException($"No {game.ToUpperInvariant()} game.sii save was found yet.");
+    }
+
+    private static decimal ParseBalance(string text)
+    {
+        var match = MoneyRegex.Match(text);
+        if (!match.Success)
+            throw new PayoutDeferredException("Sterling cannot safely edit this save yet. Set g_save_format to 2 in the game config and create a fresh save.");
+        return decimal.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture);
     }
 
     private static IEnumerable<string> CandidateDocumentRoots()
