@@ -9,6 +9,7 @@ import { config } from './config.js';
 import { pingDatabase } from './db.js';
 import { registerJobRoutes } from './jobs.js';
 import { registerLiveOpsRoutes } from './live-ops.js';
+import { registerOwnerOperationsRoutes } from './owner-ops.js';
 import { registerPayoutRoutes } from './payouts.js';
 
 export async function buildApp() {
@@ -33,13 +34,14 @@ export async function buildApp() {
   app.get('/api/v2/health', async (_request, reply) => {
     const database = await pingDatabase().catch(() => false);
     if (!database) return reply.code(503).send({ status: 'degraded', database: 'down' });
-    return { status: 'ok', database: 'up', version: '2.0.0-alpha.3' };
+    return { status: 'ok', database: 'up', version: '2.0.0-alpha.4' };
   });
 
   await registerAuthRoutes(app);
   await registerAccountManagementRoutes(app);
   await registerJobRoutes(app);
   await registerLiveOpsRoutes(app);
+  await registerOwnerOperationsRoutes(app);
   await registerPayoutRoutes(app);
 
   app.setNotFoundHandler((_request, reply) => reply.code(404).send({ error: 'not_found' }));
