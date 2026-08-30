@@ -15,7 +15,7 @@ internal static class Program
         ApplicationConfiguration.Initialize();
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
         Application.ThreadException += (_, e) => WriteCrash(e.Exception);
-        AppDomain.CurrentDomain.UnhandledException += (_, e) => WriteCrash(e.ExceptionObject as Exception ?? new Exception(String(e.ExceptionObject)));
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => WriteCrash(e.ExceptionObject as Exception ?? new Exception(Convert.ToString(e.ExceptionObject) ?? "Unknown unhandled error"));
         TaskScheduler.UnobservedTaskException += (_, e) => { WriteCrash(e.Exception); e.SetObserved(); };
         Application.Run(new DispatchShell());
     }
