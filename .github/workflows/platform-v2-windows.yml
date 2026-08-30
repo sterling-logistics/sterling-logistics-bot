@@ -7,11 +7,15 @@ on:
     paths:
       - 'platform-v2/tracker/**'
       - 'platform-v2/control-centre/**'
+      - 'platform-v2/vendor/**'
+      - '.gitmodules'
       - '.github/workflows/platform-v2-windows.yml'
   pull_request:
     paths:
       - 'platform-v2/tracker/**'
       - 'platform-v2/control-centre/**'
+      - 'platform-v2/vendor/**'
+      - '.gitmodules'
       - '.github/workflows/platform-v2-windows.yml'
 
 jobs:
@@ -19,6 +23,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
@@ -31,6 +37,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
