@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>SCSSdkClient</AssemblyName>
+    <RootNamespace>SCSSdkClient</RootNamespace>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\vendor\scs-sdk-plugin\scs-client\C#\SCSSdkClient\*.cs" />
+    <Compile Include="..\..\vendor\scs-sdk-plugin\scs-client\C#\SCSSdkClient\Object\*.cs" />
+  </ItemGroup>
+</Project>
