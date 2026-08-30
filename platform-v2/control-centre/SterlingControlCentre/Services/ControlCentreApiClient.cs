@@ -92,7 +92,11 @@ public sealed record ApiError(string Error);
 public sealed record LoginResponse(string AccessToken, string RefreshToken, SterlingOwner User);
 public sealed record SterlingOwner(long Id, string Username, string DisplayName, string Role, string RankName);
 public sealed record LiveSummary(long ActiveDrivers, long OnlineDrivers, long OnJob, long JobsInProgress, long PendingApprovals, long PendingPayouts, long FailedPayouts);
-public sealed record LiveDriver(long Id, string Username, string DisplayName, string Role, string RankName, string? TrackerVersion, string? Game, bool GameRunning, bool OnJob, string? Status, DateTime? LastSeenAt, bool IsOnline, decimal? Latitude, decimal? Longitude, decimal? HeadingDeg, decimal? SpeedKph, string? City, string? TruckMake, string? TruckModel, string? Cargo, string? OriginCity, string? DestinationCity, decimal? FuelPercent, decimal? DamagePercent, decimal? FinesTotal);
+public sealed record LiveDriver(long Id, string Username, string DisplayName, string Role, string RankName, string? TrackerVersion,
+    string? Game, bool GameRunning, bool OnJob, string? Status, DateTime? LastSeenAt, bool IsOnline,
+    decimal? Latitude, decimal? Longitude, decimal? WorldX, decimal? WorldY, decimal? WorldZ,
+    decimal? HeadingDeg, decimal? SpeedKph, string? City, string? TruckMake, string? TruckModel, string? Cargo,
+    string? OriginCity, string? DestinationCity, decimal? FuelPercent, decimal? DamagePercent, decimal? FinesTotal);
 public sealed record DriverEnvelope(IReadOnlyList<LiveDriver> Drivers);
 public sealed record OwnerDriver(long Id, string Username, string DisplayName, string Role, string RankName, bool IsActive, DateTime CreatedAt, DateTime UpdatedAt);
 public sealed record OwnerDriverEnvelope(IReadOnlyList<OwnerDriver> Drivers);
