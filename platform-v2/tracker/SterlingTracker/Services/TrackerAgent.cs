@@ -39,18 +39,25 @@ public sealed class TrackerAgent : IAsyncDisposable
             if (session is null) break;
 
             var game = _gameDetector.Detect();
-            var status = game.IsRunning ? "driving" : "online";
-            var heartbeat = new TrackerHeartbeat(
-                TrackerVersion: "2.0.0-alpha.2",
-                Game: game.Game,
-                GameRunning: game.IsRunning,
-                OnJob: false,
-                Status: status);
-
             try
             {
+                var jobs = await _api.GetMyJobsAsync(session.AccessToken, cancellationToken);
+                var activeJob = jobs.FirstOrDefault(x => string.Equals(x.Status, "in_progress", StringComparison.OrdinalIgnoreCase));
+                var onJob = activeJob is not null;
+                var status = onJob ? "on_job" : game.IsRunning ? "driving" : "online";
+                var heartbeat = new TrackerHeartbeat(
+                    TrackerVersion: "2.0.0-alpha.2",
+                    Game: game.Game ?? activeJob?.Game,
+                    GameRunning: game.IsRunning,
+                    OnJob: onJob,
+                    Status: status,
+                    Cargo: activeJob?.Cargo,
+                    OriginCity: activeJob?.OriginCity,
+                    DestinationCity: activeJob?.DestinationCity);
+
                 await _api.SendHeartbeatAsync(session.AccessToken, heartbeat, cancellationToken);
-                StatusChanged?.Invoke(this, new TrackerAgentStatus(true, game.Game, game.IsRunning, "Connected"));
+                var jobText = onJob ? $" · {activeJob!.OriginCity} → {activeJob.DestinationCity}" : string.Empty;
+                StatusChanged?.Invoke(this, new TrackerAgentStatus(true, game.Game, game.IsRunning, $"Connected{jobText}"));
             }
             catch (SterlingApiException ex) when (ex.StatusCode == 401)
             {
@@ -59,8 +66,7 @@ public sealed class TrackerAgent : IAsyncDisposable
                     session = await _api.RefreshAsync(session.RefreshToken, cancellationToken);
                     lock (_sessionGate) _session = session;
                     _sessionStore.Save(session);
-                    await _api.SendHeartbeatAsync(session.AccessToken, heartbeat, cancellationToken);
-                    StatusChanged?.Invoke(this, new TrackerAgentStatus(true, game.Game, game.IsRunning, "Connected"));
+                    StatusChanged?.Invoke(this, new TrackerAgentStatus(true, game.Game, game.IsRunning, "Session refreshed"));
                 }
                 catch
                 {
@@ -75,14 +81,8 @@ public sealed class TrackerAgent : IAsyncDisposable
                 StatusChanged?.Invoke(this, new TrackerAgentStatus(false, game.Game, game.IsRunning, "Offline - retrying"));
             }
 
-            try
-            {
-                await Task.Delay(TimeSpan.FromSeconds(15), cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
+            try { await Task.Delay(TimeSpan.FromSeconds(15), cancellationToken); }
+            catch (OperationCanceledException) { break; }
         }
     }
 
