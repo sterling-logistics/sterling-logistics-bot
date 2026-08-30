@@ -17,10 +17,7 @@ internal static class LocalState
                 ? JsonSerializer.Deserialize<TrackerState>(File.ReadAllText(StatePath), JsonOptions) ?? NewState()
                 : NewState();
 
-            // Tracker 3.0.3 is pinned to the dedicated Tracker API host.
-            // Old saved values and old STERLING_TRACKER_API values must not
-            // route the desktop app back to the Discord bot host.
-            state.ApiBase = TrackerState.PrimaryApiBase;
+            if (string.IsNullOrWhiteSpace(state.ApiBase)) state.ApiBase = TrackerState.PrimaryApiBase;
             if (string.IsNullOrWhiteSpace(state.SessionCode)) state.SessionCode = $"trk3-{Guid.NewGuid():N}";
             Save(state);
             return state;
