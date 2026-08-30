@@ -6,6 +6,7 @@ public sealed class TrackerAgent : IAsyncDisposable
     private readonly GameDetector _gameDetector;
     private readonly SecureSessionStore _sessionStore;
     private readonly CancellationTokenSource _cts = new();
+    private readonly object _sessionGate = new();
     private Task? _loop;
     private LoginResponse? _session;
 
@@ -18,9 +19,14 @@ public sealed class TrackerAgent : IAsyncDisposable
         _sessionStore = sessionStore;
     }
 
+    public LoginResponse? CurrentSession
+    {
+        get { lock (_sessionGate) return _session; }
+    }
+
     public void Start(LoginResponse session)
     {
-        _session = session;
+        lock (_sessionGate) _session = session;
         if (_loop is null)
             _loop = Task.Run(() => LoopAsync(_cts.Token));
     }
@@ -29,7 +35,7 @@ public sealed class TrackerAgent : IAsyncDisposable
     {
         while (!cancellationToken.IsCancellationRequested)
         {
-            var session = _session;
+            var session = CurrentSession;
             if (session is null) break;
 
             var game = _gameDetector.Detect();
@@ -51,7 +57,7 @@ public sealed class TrackerAgent : IAsyncDisposable
                 try
                 {
                     session = await _api.RefreshAsync(session.RefreshToken, cancellationToken);
-                    _session = session;
+                    lock (_sessionGate) _session = session;
                     _sessionStore.Save(session);
                     await _api.SendHeartbeatAsync(session.AccessToken, heartbeat, cancellationToken);
                     StatusChanged?.Invoke(this, new TrackerAgentStatus(true, game.Game, game.IsRunning, "Connected"));
@@ -59,6 +65,7 @@ public sealed class TrackerAgent : IAsyncDisposable
                 catch
                 {
                     _sessionStore.Clear();
+                    lock (_sessionGate) _session = null;
                     StatusChanged?.Invoke(this, new TrackerAgentStatus(false, game.Game, game.IsRunning, "Session expired"));
                     break;
                 }
