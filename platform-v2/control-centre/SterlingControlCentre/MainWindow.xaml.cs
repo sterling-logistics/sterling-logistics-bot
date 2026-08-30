@@ -42,6 +42,7 @@ public partial class MainWindow : Window
             LoginButton.Content = "Owner Connected";
             OwnerNameText.Text = _api.CurrentOwner?.DisplayName ?? username;
             OwnerStatusText.Text = "Owner / Founder · Online";
+            OwnerMenuButton.IsEnabled = true;
             StatusText.Text = "Connected to Sterling Platform. Live operations active.";
             await RefreshDashboardAsync();
             _refreshTimer.Start();
@@ -56,6 +57,18 @@ public partial class MainWindow : Window
             StatusText.Text = ex.Message;
             LoginButton.IsEnabled = true;
         }
+    }
+
+    private void OwnerMenuButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_api.IsOwnerSignedIn)
+        {
+            StatusText.Text = "Owner/Founder authentication is required.";
+            return;
+        }
+        var window = new OwnerOperationsWindow(_api) { Owner = this };
+        window.ShowDialog();
+        _ = RefreshDashboardAsync();
     }
 
     private async Task RefreshDashboardAsync()
