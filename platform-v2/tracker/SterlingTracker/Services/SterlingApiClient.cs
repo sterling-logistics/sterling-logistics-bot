@@ -46,6 +46,13 @@ public sealed class SterlingApiClient
             throw new SterlingApiException("Heartbeat rejected by Sterling server.", (int)response.StatusCode);
     }
 
+    public async Task SendTelemetryEventAsync(string accessToken, TrackerTelemetryEvent telemetryEvent, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAsync(HttpMethod.Post, "api/v2/tracker/events", accessToken, telemetryEvent, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            throw new SterlingApiException("Telemetry event rejected by Sterling server.", (int)response.StatusCode);
+    }
+
     public async Task<IReadOnlyList<TrackerJob>> GetMyJobsAsync(string accessToken, CancellationToken cancellationToken = default)
     {
         using var response = await SendAsync(HttpMethod.Get, "api/v2/jobs/mine", accessToken, null, cancellationToken);
@@ -122,10 +129,11 @@ public sealed class SterlingApiException : Exception
 public sealed record LoginResponse(string AccessToken, string RefreshToken, SterlingUser User);
 public sealed record SterlingUser(long Id, string Username, string DisplayName, string Role, string RankName);
 public sealed record TrackerHeartbeat(string TrackerVersion, string? Game, bool GameRunning, bool OnJob, string Status,
-    double? Latitude = null, double? Longitude = null, double? HeadingDeg = null, double? SpeedKph = null,
-    string? City = null, string? TruckMake = null, string? TruckModel = null, string? Cargo = null,
-    string? OriginCity = null, string? DestinationCity = null, double? FuelPercent = null,
-    double? DamagePercent = null, double? FinesTotal = null);
+    double? Latitude = null, double? Longitude = null, double? WorldX = null, double? WorldY = null, double? WorldZ = null,
+    double? HeadingDeg = null, double? SpeedKph = null, string? City = null, string? TruckMake = null,
+    string? TruckModel = null, string? Cargo = null, string? OriginCity = null, string? DestinationCity = null,
+    double? FuelPercent = null, double? DamagePercent = null, double? FinesTotal = null);
+public sealed record TrackerTelemetryEvent(string EventType, string? Game, Guid? JobPublicId, IReadOnlyDictionary<string, object?>? Payload = null);
 public sealed record TrackerJob(Guid Id, string Status, string Game, string Cargo, string OriginCity, string DestinationCity, decimal? DistanceKm, decimal PayoutAmount);
 public sealed record JobEnvelope(IReadOnlyList<TrackerJob> Jobs);
 public sealed record JobSubmitResponse(bool Ok, string Status, bool Duplicate, bool AutoApproved, Guid? PayoutId);
