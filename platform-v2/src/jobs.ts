@@ -38,15 +38,32 @@ async function event(connection: any, jobId: number, actorId: number | null, eve
   );
 }
 
+async function createPayout(connection: any, job: { id: number; driver_user_id: number; payout_amount: number }, actorId: number, source: string) {
+  const payoutPublicId = randomUUID();
+  await connection.execute(
+    `INSERT INTO payouts (public_id, job_id, driver_user_id, amount, status) VALUES (?, ?, ?, ?, 'pending')`,
+    [payoutPublicId, job.id, job.driver_user_id, job.payout_amount]
+  );
+  const [payoutRows] = await connection.query<any[]>(`SELECT id FROM payouts WHERE job_id = ? LIMIT 1`, [job.id]);
+  await connection.execute(
+    `INSERT INTO payout_events (payout_id, event_type, payload) VALUES (?, 'payout.created', JSON_OBJECT('source', ?, 'actorId', ?))`,
+    [payoutRows[0].id, source, actorId]
+  );
+  return payoutPublicId;
+}
+
 export async function registerJobRoutes(app: FastifyInstance): Promise<void> {
-  app.post('/api/v2/staff/jobs', { preHandler: requireStaff() }, async (request, reply) => {
+  app.post('/api/v2/owner/jobs', { preHandler: requireStaff(['owner']) }, async (request, reply) => {
     const parsed = createJobSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_job', details: parsed.error.flatten() });
     const actor = currentUser(request);
     const publicId = randomUUID();
 
     const result = await withTransaction(async (connection) => {
-      const [users] = await connection.query<any[]>(`SELECT id, is_active FROM users WHERE id = ? AND role = 'driver' LIMIT 1 FOR UPDATE`, [parsed.data.driverUserId]);
+      const [users] = await connection.query<any[]>(
+        `SELECT id, role, is_active FROM users WHERE id = ? AND role IN ('driver','owner') LIMIT 1 FOR UPDATE`,
+        [parsed.data.driverUserId]
+      );
       if (!users[0] || !users[0].is_active) return null;
       const [insert] = await connection.execute<any>(
         `INSERT INTO jobs (public_id, driver_user_id, game, cargo, origin_city, destination_city, distance_km, payout_amount)
@@ -70,6 +87,18 @@ export async function registerJobRoutes(app: FastifyInstance): Promise<void> {
               approved_at AS approvedAt, paid_at AS paidAt, created_at AS createdAt
          FROM jobs WHERE driver_user_id = ? ORDER BY created_at DESC LIMIT 250`,
       [user.id]
+    );
+    return { jobs: rows };
+  });
+
+  app.get('/api/v2/owner/jobs', { preHandler: requireStaff(['owner']) }, async (request) => {
+    const [rows] = await db.query<any[]>(
+      `SELECT j.public_id AS id, j.status, j.game, j.cargo, j.origin_city AS originCity,
+              j.destination_city AS destinationCity, j.distance_km AS distanceKm, j.payout_amount AS payoutAmount,
+              j.submitted_at AS submittedAt, j.approved_at AS approvedAt, j.paid_at AS paidAt,
+              j.created_at AS createdAt, u.id AS driverUserId, u.username, u.display_name AS driverDisplayName, u.role AS driverRole
+         FROM jobs j JOIN users u ON u.id = j.driver_user_id
+        ORDER BY j.created_at DESC LIMIT 1000`
     );
     return { jobs: rows };
   });
@@ -104,10 +133,27 @@ export async function registerJobRoutes(app: FastifyInstance): Promise<void> {
     const result = await withTransaction(async (connection) => {
       const [dupe] = await connection.query<any[]>(`SELECT public_id, status FROM jobs WHERE driver_user_id = ? AND client_submission_id = ? LIMIT 1`, [user.id, body.data.clientSubmissionId]);
       if (dupe[0]) return { kind: 'duplicate', status: dupe[0].status } as const;
-      const [rows] = await connection.query<any[]>(`SELECT id, status FROM jobs WHERE public_id = ? AND driver_user_id = ? LIMIT 1 FOR UPDATE`, [params.data.id, user.id]);
+      const [rows] = await connection.query<any[]>(
+        `SELECT j.id, j.status, j.driver_user_id, j.payout_amount, u.role AS driver_role
+           FROM jobs j JOIN users u ON u.id = j.driver_user_id
+          WHERE j.public_id = ? AND j.driver_user_id = ? LIMIT 1 FOR UPDATE`,
+        [params.data.id, user.id]
+      );
       const job = rows[0];
       if (!job) return { kind: 'missing' } as const;
       if (job.status !== 'in_progress') return { kind: 'conflict' } as const;
+
+      if (job.driver_role === 'owner') {
+        await connection.execute(
+          `UPDATE jobs SET status = 'approved', client_submission_id = ?, distance_km = ?, revenue_game = ?, submitted_at = NOW(3), approved_at = NOW(3) WHERE id = ?`,
+          [body.data.clientSubmissionId, body.data.distanceKm, body.data.revenueGame ?? null, job.id]
+        );
+        await event(connection, job.id, user.id, 'job.submitted', 'in_progress', 'submitted', { clientSubmissionId: body.data.clientSubmissionId });
+        await event(connection, job.id, user.id, 'job.owner_auto_approved', 'submitted', 'approved');
+        const payoutId = await createPayout(connection, job, user.id, 'owner_auto_approval');
+        return { kind: 'owner_approved', payoutId } as const;
+      }
+
       await connection.execute(
         `UPDATE jobs SET status = 'submitted', client_submission_id = ?, distance_km = ?, revenue_game = ?, submitted_at = NOW(3) WHERE id = ?`,
         [body.data.clientSubmissionId, body.data.distanceKm, body.data.revenueGame ?? null, job.id]
@@ -119,10 +165,11 @@ export async function registerJobRoutes(app: FastifyInstance): Promise<void> {
     if (result.kind === 'missing') return reply.code(404).send({ error: 'job_not_found' });
     if (result.kind === 'conflict') return reply.code(409).send({ error: 'invalid_job_state' });
     if (result.kind === 'duplicate') return { ok: true, duplicate: true, status: result.status };
-    return { ok: true, status: 'submitted' };
+    if (result.kind === 'owner_approved') return { ok: true, status: 'approved', autoApproved: true, payoutId: result.payoutId };
+    return { ok: true, status: 'submitted', approvalRequired: true };
   });
 
-  app.post('/api/v2/staff/jobs/:id/approve', { preHandler: requireStaff(['manager', 'admin', 'owner']) }, async (request, reply) => {
+  app.post('/api/v2/owner/jobs/:id/approve', { preHandler: requireStaff(['owner']) }, async (request, reply) => {
     const params = publicIdParams.safeParse(request.params);
     const body = reviewSchema.safeParse(request.body ?? {});
     if (!params.success || !body.success) return reply.code(400).send({ error: 'invalid_review' });
@@ -140,15 +187,8 @@ export async function registerJobRoutes(app: FastifyInstance): Promise<void> {
 
       await connection.execute(`UPDATE jobs SET status = 'approved', approved_at = NOW(3) WHERE id = ?`, [job.id]);
       await event(connection, job.id, actor.id, 'job.approved', 'submitted', 'approved', { notes: body.data.notes ?? null });
-
-      const payoutPublicId = randomUUID();
-      await connection.execute(
-        `INSERT INTO payouts (public_id, job_id, driver_user_id, amount, status) VALUES (?, ?, ?, ?, 'pending')`,
-        [payoutPublicId, job.id, job.driver_user_id, job.payout_amount]
-      );
-      const [payoutRows] = await connection.query<any[]>(`SELECT id FROM payouts WHERE job_id = ? LIMIT 1`, [job.id]);
-      await connection.execute(`INSERT INTO payout_events (payout_id, event_type, payload) VALUES (?, 'payout.created', JSON_OBJECT('approvedBy', ?))`, [payoutRows[0].id, actor.id]);
-      return { kind: 'approved', payoutId: payoutPublicId } as const;
+      const payoutId = await createPayout(connection, job, actor.id, 'owner_approval');
+      return { kind: 'approved', payoutId } as const;
     });
 
     if (result.kind === 'missing') return reply.code(404).send({ error: 'job_not_found' });
@@ -157,7 +197,7 @@ export async function registerJobRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true, status: 'approved', payoutId: result.payoutId };
   });
 
-  app.post('/api/v2/staff/jobs/:id/decline', { preHandler: requireStaff(['manager', 'admin', 'owner']) }, async (request, reply) => {
+  app.post('/api/v2/owner/jobs/:id/decline', { preHandler: requireStaff(['owner']) }, async (request, reply) => {
     const params = publicIdParams.safeParse(request.params);
     const body = reviewSchema.safeParse(request.body ?? {});
     if (!params.success || !body.success) return reply.code(400).send({ error: 'invalid_review' });
