@@ -8,6 +8,7 @@ import { registerAuthRoutes } from './auth.js';
 import { config } from './config.js';
 import { pingDatabase } from './db.js';
 import { registerJobRoutes } from './jobs.js';
+import { registerLiveOpsRoutes } from './live-ops.js';
 import { registerPayoutRoutes } from './payouts.js';
 
 export async function buildApp() {
@@ -17,9 +18,6 @@ export async function buildApp() {
       redact: [
         'req.headers.authorization',
         'body.password',
-        'body.currentPassword',
-        'body.newPassword',
-        'body.temporaryPassword',
         'body.refreshToken',
         'body.leaseToken'
       ]
@@ -28,33 +26,23 @@ export async function buildApp() {
   });
 
   await app.register(helmet);
-  await app.register(cors, {
-    origin: false,
-    credentials: false
-  });
-  await app.register(rateLimit, {
-    max: 120,
-    timeWindow: '1 minute'
-  });
-  await app.register(jwt, {
-    secret: config.JWT_ACCESS_SECRET
-  });
+  await app.register(cors, { origin: false, credentials: false });
+  await app.register(rateLimit, { max: 120, timeWindow: '1 minute' });
+  await app.register(jwt, { secret: config.JWT_ACCESS_SECRET });
 
   app.get('/api/v2/health', async (_request, reply) => {
     const database = await pingDatabase().catch(() => false);
     if (!database) return reply.code(503).send({ status: 'degraded', database: 'down' });
-    return { status: 'ok', database: 'up', version: '2.0.0-alpha.2' };
+    return { status: 'ok', database: 'up', version: '2.0.0-alpha.3' };
   });
 
   await registerAuthRoutes(app);
   await registerAccountManagementRoutes(app);
   await registerJobRoutes(app);
+  await registerLiveOpsRoutes(app);
   await registerPayoutRoutes(app);
 
-  app.setNotFoundHandler((_request, reply) => {
-    reply.code(404).send({ error: 'not_found' });
-  });
-
+  app.setNotFoundHandler((_request, reply) => reply.code(404).send({ error: 'not_found' }));
   app.setErrorHandler((error, request, reply) => {
     request.log.error({ err: error }, 'request failed');
     if (!reply.sent) reply.code(500).send({ error: 'internal_error' });
