@@ -11,7 +11,7 @@
      <TextBlock Text="STERLING" Foreground="White" FontSize="26" FontWeight="Bold"/>
      <TextBlock Text="CONTROL CENTRE" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,2,0,28"/>
      <Button Content="Dashboard" Height="42" Margin="0,0,0,8"/>
-     <Button Content="Live Map" Height="42" Margin="0,0,0,8"/>
+     <Button x:Name="LiveMapButton" Content="Live Map" Height="42" Margin="0,0,0,8" IsEnabled="False" Click="LiveMapButton_Click"/>
      <Button Content="Drivers" Height="42" Margin="0,0,0,8"/>
      <Button Content="Jobs" Height="42" Margin="0,0,0,8"/>
      <Button Content="Approvals" Height="42" Margin="0,0,0,8"/>
