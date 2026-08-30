@@ -15,6 +15,30 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: sterling-ci-root
+          MYSQL_DATABASE: sterling_v2
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -psterling-ci-root"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      NODE_ENV: test
+      HOST: 127.0.0.1
+      PORT: 8200
+      DATABASE_URL: mysql://root:sterling-ci-root@127.0.0.1:3306/sterling_v2
+      JWT_ACCESS_SECRET: sterling-ci-access-secret-0123456789-abcdefghijklmnopqrstuvwxyz
+      JWT_REFRESH_SECRET: sterling-ci-refresh-secret-0123456789-abcdefghijklmnopqrstuvwxyz
+      STERLING_OWNER_USERNAME: sterling_ci_owner
+      STERLING_OWNER_PASSWORD: Sterling-CI-Owner-Password-2026!
+      STERLING_OWNER_DISPLAY_NAME: Sterling CI Owner
+      STERLING_SMOKE_URL: http://127.0.0.1:8200
     defaults:
       run:
         working-directory: platform-v2
@@ -33,3 +57,30 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+      - name: Apply database migrations
+        run: npm run migrate
+      - name: Prove migrations are idempotent
+        run: npm run migrate
+      - name: Bootstrap isolated Owner account
+        run: npm run bootstrap:owner
+      - name: Start production build
+        run: |
+          npm start > /tmp/sterling-v2.log 2>&1 &
+          echo $! > /tmp/sterling-v2.pid
+      - name: Wait for healthy API
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:8200/api/v2/health > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/sterling-v2.log || true
+          exit 1
+      - name: Production smoke test
+        run: node scripts/production-smoke.mjs
+      - name: Stop test server
+        if: always()
+        run: |
+          if [ -f /tmp/sterling-v2.pid ]; then kill $(cat /tmp/sterling-v2.pid) || true; fi
+          cat /tmp/sterling-v2.log || true
