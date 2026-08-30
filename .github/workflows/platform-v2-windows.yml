@@ -29,11 +29,12 @@ jobs:
 
   control-centre:
     runs-on: windows-latest
-    if: ${{ hashFiles('platform-v2/control-centre/**/*.csproj') != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+      - name: Restore Control Centre
+        run: dotnet restore platform-v2/control-centre/SterlingControlCentre/SterlingControlCentre.csproj
       - name: Build Control Centre
-        run: dotnet build platform-v2/control-centre/SterlingControlCentre/SterlingControlCentre.csproj --configuration Release
+        run: dotnet build platform-v2/control-centre/SterlingControlCentre/SterlingControlCentre.csproj --configuration Release --no-restore
