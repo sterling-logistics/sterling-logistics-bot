@@ -7,6 +7,7 @@ on:
     paths:
       - 'platform-v2/tracker/**'
       - 'platform-v2/control-centre/**'
+      - 'platform-v2/packaging/**'
       - 'platform-v2/vendor/**'
       - '.gitmodules'
       - '.github/workflows/platform-v2-windows.yml'
@@ -14,6 +15,7 @@ on:
     paths:
       - 'platform-v2/tracker/**'
       - 'platform-v2/control-centre/**'
+      - 'platform-v2/packaging/**'
       - 'platform-v2/vendor/**'
       - '.gitmodules'
       - '.github/workflows/platform-v2-windows.yml'
@@ -46,3 +48,66 @@ jobs:
         run: dotnet restore platform-v2/control-centre/SterlingControlCentre/SterlingControlCentre.csproj
       - name: Build Control Centre
         run: dotnet build platform-v2/control-centre/SterlingControlCentre/SterlingControlCentre.csproj --configuration Release --no-restore
+
+  installers:
+    needs: [tracker, control-centre]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish self-contained Windows apps
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force platform-v2/packaging/publish/tracker | Out-Null
+          New-Item -ItemType Directory -Force platform-v2/packaging/publish/control-centre | Out-Null
+          dotnet publish platform-v2/tracker/SterlingTracker/SterlingTracker.csproj -c Release -r win-x64 --self-contained true -o platform-v2/packaging/publish/tracker
+          dotnet publish platform-v2/control-centre/SterlingControlCentre/SterlingControlCentre.csproj -c Release -r win-x64 --self-contained true -o platform-v2/packaging/publish/control-centre
+
+      - name: Download pinned SCS telemetry plugin release
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'scs-telemetry.zip'
+          $extract = Join-Path $env:RUNNER_TEMP 'scs-telemetry'
+          Invoke-WebRequest 'https://github.com/RenCloud/scs-sdk-plugin/releases/download/V.1.12.1/release_v_1_12_1.zip' -OutFile $zip
+          Expand-Archive $zip -DestinationPath $extract -Force
+          $dlls = Get-ChildItem $extract -Recurse -Filter '*.dll'
+          $plugin = $dlls | Where-Object { $_.FullName -match 'win_x64|x64' } | Select-Object -First 1
+          if (-not $plugin) { $plugin = $dlls | Select-Object -First 1 }
+          if (-not $plugin) { throw 'No telemetry plugin DLL found in pinned SCS release.' }
+          New-Item -ItemType Directory -Force platform-v2/packaging/payload/telemetry | Out-Null
+          Copy-Item $plugin.FullName platform-v2/packaging/payload/telemetry/scs-telemetry.dll -Force
+          Write-Host "Bundled telemetry plugin: $($plugin.FullName)"
+
+      - name: Compile Windows installers
+        shell: pwsh
+        working-directory: platform-v2/packaging
+        run: |
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          if (-not (Test-Path $iscc)) { throw 'Inno Setup compiler is unavailable.' }
+          New-Item -ItemType Directory -Force output | Out-Null
+          & $iscc tracker.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $iscc control-centre.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload Tachograph installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sterling-Tachograph-V2-Setup
+          path: platform-v2/packaging/output/Sterling-Tachograph-2.0.0-alpha.3-Setup.exe
+          if-no-files-found: error
+
+      - name: Upload Control Centre installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sterling-Control-Centre-V2-Setup
+          path: platform-v2/packaging/output/Sterling-Control-Centre-2.0.0-alpha.2-Setup.exe
+          if-no-files-found: error
