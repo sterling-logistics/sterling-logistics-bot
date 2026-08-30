@@ -44,7 +44,7 @@ async function createPayout(connection: any, job: { id: number; driver_user_id: 
     `INSERT INTO payouts (public_id, job_id, driver_user_id, amount, status) VALUES (?, ?, ?, ?, 'pending')`,
     [payoutPublicId, job.id, job.driver_user_id, job.payout_amount]
   );
-  const [payoutRows] = await connection.query<any[]>(`SELECT id FROM payouts WHERE job_id = ? LIMIT 1`, [job.id]);
+  const [payoutRows] = await connection.query(`SELECT id FROM payouts WHERE job_id = ? LIMIT 1`, [job.id]) as [any[], unknown];
   await connection.execute(
     `INSERT INTO payout_events (payout_id, event_type, payload) VALUES (?, 'payout.created', JSON_OBJECT('source', ?, 'actorId', ?))`,
     [payoutRows[0].id, source, actorId]
@@ -91,7 +91,7 @@ export async function registerJobRoutes(app: FastifyInstance): Promise<void> {
     return { jobs: rows };
   });
 
-  app.get('/api/v2/owner/jobs', { preHandler: requireStaff(['owner']) }, async (request) => {
+  app.get('/api/v2/owner/jobs', { preHandler: requireStaff(['owner']) }, async () => {
     const [rows] = await db.query<any[]>(
       `SELECT j.public_id AS id, j.status, j.game, j.cargo, j.origin_city AS originCity,
               j.destination_city AS destinationCity, j.distance_km AS distanceKm, j.payout_amount AS payoutAmount,
