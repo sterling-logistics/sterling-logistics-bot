@@ -9,6 +9,7 @@ internal sealed record DispatchDriver(long Id, string SterlingDriverId, string D
     public override string ToString() => $"{SterlingDriverId} — {DiscordUsername}";
 }
 
+internal sealed record DispatchCatalog(List<string> Cargo,List<string> Locations);
 internal sealed record DispatchAssignment(string WorkCode,string Driver,string Cargo,string Origin,string Destination,string Status,double MinMiles,string Deadline,bool TrackerVerified,double ActualMiles,double Damage,string Notes);
 internal sealed record DispatchJobApproval(string ApprovalCode,string JobCode,string Driver,string Cargo,string Route,double Miles,decimal Revenue,decimal DriverPayment,double Damage,string Status,string CreatedAt);
 internal sealed record DispatchPayout(long Id,string Driver,decimal Amount,string Status,string RequestedAt,string AppliedAt,string Error);
@@ -98,6 +99,14 @@ internal sealed class DispatchApiClient : IDisposable
         using var doc=await GetAsync("/api/dispatch/drivers",ct);var list=new List<DispatchDriver>();
         foreach(var d in doc.RootElement.GetProperty("drivers").EnumerateArray())list.Add(new DispatchDriver(d.GetProperty("id").GetInt64(),Text(d,"sterling_driver_id","Unknown"),Text(d,"discord_username","Unknown"),Text(d,"rank_name","Driver"),Text(d,"department","")));
         return list;
+    }
+
+    public async Task<DispatchCatalog> GetCatalogAsync(CancellationToken ct=default)
+    {
+        using var doc=await GetAsync("/api/dispatch/catalog",ct);
+        var cargo=doc.RootElement.GetProperty("cargo").EnumerateArray().Select(x=>x.GetString()??"").Where(x=>!string.IsNullOrWhiteSpace(x)).ToList();
+        var locations=doc.RootElement.GetProperty("locations").EnumerateArray().Select(x=>x.GetString()??"").Where(x=>!string.IsNullOrWhiteSpace(x)).ToList();
+        return new DispatchCatalog(cargo,locations);
     }
 
     public async Task<List<DispatchAssignment>> GetAssignmentsAsync(string status="active",CancellationToken ct=default)
