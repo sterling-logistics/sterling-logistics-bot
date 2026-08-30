@@ -8,6 +8,7 @@ import {registerPublicLiveRoutes} from "./src/web/public-live.js";
 import {registerDesktopAuthRoutes,authenticateDesktopSession} from "./src/auth/desktop.js";
 import {authenticateTracker,ingestTrackerTelemetry} from "./src/telemetry/service.js";
 import {persistTrackerJobEvent} from "./src/jobs/persistence.js";
+import {ensureDispatchStaffApiSchema,registerDispatchStaffRoutes} from "./src/dispatch/staff-api.js";
 
 dotenv.config();
 
@@ -49,8 +50,10 @@ if(!missing.length){
     await ensureWebsiteSchema();
     await ensureApplicationSchema();
     await ensureEconomySchema();
+    await ensureDispatchStaffApiSchema();
 
     registerDesktopAuthRoutes(app,config);
+    registerDispatchStaffRoutes(app,trackerAuth,{includeAssignments:true});
 
     app.get("/api/desktop/me",async(req,res)=>{
       try{
@@ -84,6 +87,16 @@ if(!missing.length){
         console.error("[Sterling Web Tracker API]",e);
         res.status(400).json({ok:false,error:String(e.message||e)});
       }
+    });
+
+    app.get("/api/tracker/jobs",async(req,res)=>{
+      try{
+        const d=await trackerAuth(req);
+        if(!d)return res.status(401).json({ok:false,error:"Invalid tracker session"});
+        const {db}=await import("./src/database/mysql.js");
+        const[rows]=await db().execute(`SELECT job_code,status,truck_model,cargo,origin_city,destination_city,distance_miles,income,truck_damage,trailer_damage,cargo_damage,started_at,completed_at,created_at FROM jobs WHERE driver_id=? ORDER BY COALESCE(completed_at,created_at) DESC LIMIT 100`,[d.driver_id]);
+        res.setHeader("Cache-Control","no-store");res.json({ok:true,jobs:rows});
+      }catch(e){res.status(500).json({ok:false,error:"Could not load tracker job history"});}
     });
 
     app.get("/api/tracker/payout",async(req,res)=>{
@@ -142,7 +155,7 @@ app.get("/health",async(_req,res)=>{
   }
   try{
     const d=await pingDatabase();
-    res.json({ok:true,service:"sterling-web",database:d.db,discord:true,desktopLogin:true,trackerApi:true});
+    res.json({ok:true,service:"sterling-web",database:d.db,discord:true,desktopLogin:true,trackerApi:true,dispatchApi:true,staffJobApprovals:true,staffPayouts:true});
   }catch(e){
     res.status(503).json({ok:false,service:"sterling-web",stage:"database",error:e?.code||"DATABASE_UNAVAILABLE"});
   }
@@ -153,4 +166,4 @@ if(!backendReady){
 }
 
 const port=Number(process.env.PORT||3000);
-app.listen(port,"0.0.0.0",()=>console.log(`[Sterling Web] Listening on ${port}${backendReady?" (ready + tracker API)":" (diagnostic mode)"}`));
+app.listen(port,"0.0.0.0",()=>console.log(`[Sterling Web] Listening on ${port}${backendReady?" (ready + tracker/dispatch API)":" (diagnostic mode)"}`));
