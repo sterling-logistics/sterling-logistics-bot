@@ -1,5 +1,5 @@
 #define MyAppName "Sterling Dispatch"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.1"
 #define MyAppPublisher "Sterling Logistics"
 #define MyAppExeName "SterlingDispatch.exe"
 
@@ -15,14 +15,14 @@ DefaultDirName={localappdata}\Programs\Sterling Logistics\Dispatch
 DefaultGroupName=Sterling Logistics
 DisableProgramGroupPage=yes
 OutputDir=..\dist
-OutputBaseFilename=SterlingDispatch-1.0.0-Setup
+OutputBaseFilename=SterlingDispatch-1.0.1-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-UninstallDisplayName=Sterling Dispatch 1.0.0
+UninstallDisplayName=Sterling Dispatch 1.0.1
 CloseApplications=yes
 RestartApplications=no
 
