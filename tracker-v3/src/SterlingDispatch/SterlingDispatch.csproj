@@ -23,5 +23,6 @@
     <Compile Include="..\SterlingTracker\SterlingApiClient.cs" Link="Shared\SterlingApiClient.cs" />
     <Compile Include="..\SterlingTracker\TelemetryService.cs" Link="Shared\TelemetryService.cs" />
     <Compile Include="..\SterlingTracker\TrackerModels.cs" Link="Shared\TrackerModels.cs" />
+    <Compile Include="..\SterlingTracker\Vendor\SCSSdkClient\**\*.cs" Link="Vendor\SCSSdkClient\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>
