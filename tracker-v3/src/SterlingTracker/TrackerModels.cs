@@ -62,8 +62,11 @@ internal sealed class DriverProfile
 
 internal sealed class TrackerState
 {
-    public const string PrimaryApiBase = "http://78.108.218.104:8112";
-    public const string LegacyWebsiteApiBase = "https://sterlinglogisticsvtc.co.uk";
+    // The HTTPS Sterling web backend is the primary desktop API. Dedicated
+    // tracker hosts remain as fallbacks so a single game/API node outage does
+    // not take Driver Tracker or Staff Dispatch offline.
+    public const string PrimaryApiBase = "https://sterlinglogisticsvtc.co.uk";
+    public const string LegacyWebsiteApiBase = "http://78.108.218.104:8112";
     public const string LegacyApiBase = "http://45.43.163.175:3000";
     public const string LegacyApiBase8101 = "http://45.43.163.175:8101";
     public string ApiBase { get; set; } = PrimaryApiBase;
