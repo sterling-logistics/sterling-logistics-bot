@@ -7,13 +7,14 @@ public partial class MainWindow : Window
 {
     private readonly SterlingApiClient _api = new();
     private readonly SecureSessionStore _sessionStore = new();
+    private readonly ScsTelemetryService _telemetry = new();
     private readonly TrackerAgent _agent;
     private readonly PayoutWorker _payoutWorker;
 
     public MainWindow()
     {
         InitializeComponent();
-        _agent = new TrackerAgent(_api, new GameDetector(), _sessionStore);
+        _agent = new TrackerAgent(_api, new GameDetector(), _sessionStore, _telemetry, new JobSyncStateStore());
         _payoutWorker = new PayoutWorker(_api, _agent, new PayoutJournal());
         _agent.StatusChanged += (_, status) => Dispatcher.Invoke(() =>
         {
@@ -76,7 +77,7 @@ public partial class MainWindow : Window
             PasswordBox.IsEnabled = false;
             RememberMeBox.IsEnabled = false;
             SignInButton.Content = $"Signed in as {session.User.DisplayName}";
-            StatusText.Text = "Connected to Sterling.";
+            StatusText.Text = "Connected to Sterling. Waiting for ETS2/ATS telemetry.";
         }
         catch (SterlingApiException ex)
         {
