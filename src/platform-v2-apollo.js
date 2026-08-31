@@ -17,9 +17,6 @@ if (!existsSync(envFile)) {
 }
 
 try {
-  // Apollo starts this wrapper from the repository root. Load Platform V2's
-  // environment file explicitly so migrations and the API receive the same
-  // configuration regardless of the parent working directory.
   process.loadEnvFile(envFile);
 } catch (error) {
   console.error('[Platform V2] Could not load platform-v2/.env:', error);
@@ -53,12 +50,22 @@ function run(command, args, options = {}) {
 console.log('[Platform V2] Preparing Sterling Platform 2.0 for Apollo...');
 
 try {
-  // NODE_ENV=production makes npm omit devDependencies by default. Platform V2
-  // needs TypeScript and tsx during startup for the build and migration steps,
-  // so explicitly include devDependencies here.
   await run('npm', ['install', '--include=dev', '--no-audit', '--no-fund']);
   await run('npm', ['run', 'build']);
   await run('npm', ['run', 'migrate']);
+
+  const wantsOwnerBootstrap = ['1', 'true', 'yes'].includes(
+    String(process.env.STERLING_BOOTSTRAP_OWNER ?? '').trim().toLowerCase(),
+  );
+
+  if (wantsOwnerBootstrap) {
+    if (!process.env.STERLING_OWNER_USERNAME || !process.env.STERLING_OWNER_PASSWORD) {
+      throw new Error('STERLING_BOOTSTRAP_OWNER is enabled but Owner username/password are missing.');
+    }
+    console.log('[Platform V2] One-time Owner bootstrap requested...');
+    await run('npm', ['run', 'bootstrap:owner']);
+    console.log('[Platform V2] Owner bootstrap completed. Remove STERLING_BOOTSTRAP_OWNER and STERLING_OWNER_PASSWORD from .env before the next restart.');
+  }
 
   const apiEnv = {
     ...process.env,
