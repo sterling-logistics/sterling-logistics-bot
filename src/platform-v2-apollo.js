@@ -53,10 +53,10 @@ function run(command, args, options = {}) {
 console.log('[Platform V2] Preparing Sterling Platform 2.0 for Apollo...');
 
 try {
-  // Apollo's stock Node egg installs only the repository-root package.
-  // Platform V2 is intentionally isolated in /platform-v2, so install and
-  // build it here before applying repeatable migrations and starting the API.
-  await run('npm', ['install', '--no-audit', '--no-fund']);
+  // NODE_ENV=production makes npm omit devDependencies by default. Platform V2
+  // needs TypeScript and tsx during startup for the build and migration steps,
+  // so explicitly include devDependencies here.
+  await run('npm', ['install', '--include=dev', '--no-audit', '--no-fund']);
   await run('npm', ['run', 'build']);
   await run('npm', ['run', 'migrate']);
 
