@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const repoRoot = process.cwd();
@@ -16,11 +16,30 @@ if (!existsSync(envFile)) {
   process.exit(1);
 }
 
-try {
-  process.loadEnvFile(envFile);
-} catch (error) {
-  console.error('[Platform V2] Could not load platform-v2/.env:', error);
-  process.exit(1);
+function parseEnvFile(path) {
+  const values = {};
+  const text = readFileSync(path, 'utf8');
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eq = line.indexOf('=');
+    if (eq <= 0) continue;
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    values[key] = value;
+  }
+  return values;
+}
+
+const fileEnv = parseEnvFile(envFile);
+for (const [key, value] of Object.entries(fileEnv)) {
+  process.env[key] = value;
 }
 
 for (const required of ['DATABASE_URL', 'JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET']) {
@@ -55,22 +74,27 @@ try {
   await run('npm', ['run', 'migrate']);
 
   const wantsOwnerBootstrap = ['1', 'true', 'yes'].includes(
-    String(process.env.STERLING_BOOTSTRAP_OWNER ?? '').trim().toLowerCase(),
+    String(fileEnv.STERLING_BOOTSTRAP_OWNER ?? process.env.STERLING_BOOTSTRAP_OWNER ?? '').trim().toLowerCase(),
   );
 
   if (wantsOwnerBootstrap) {
-    if (!process.env.STERLING_OWNER_USERNAME || !process.env.STERLING_OWNER_PASSWORD) {
-      throw new Error('STERLING_BOOTSTRAP_OWNER is enabled but Owner username/password are missing.');
+    const ownerUsername = String(fileEnv.STERLING_OWNER_USERNAME ?? '').trim();
+    const ownerPassword = String(fileEnv.STERLING_OWNER_PASSWORD ?? '');
+    const ownerDisplayName = String(fileEnv.STERLING_OWNER_DISPLAY_NAME ?? 'Owner / Founder').trim() || 'Owner / Founder';
+
+    if (!ownerUsername || !ownerPassword) {
+      throw new Error('STERLING_BOOTSTRAP_OWNER is enabled, but STERLING_OWNER_USERNAME or STERLING_OWNER_PASSWORD is missing from platform-v2/.env.');
     }
 
     console.log('[Platform V2] One-time Owner bootstrap requested...');
-    const bootstrapEnv = {
-      ...process.env,
-      STERLING_OWNER_USERNAME: String(process.env.STERLING_OWNER_USERNAME),
-      STERLING_OWNER_PASSWORD: String(process.env.STERLING_OWNER_PASSWORD),
-      STERLING_OWNER_DISPLAY_NAME: String(process.env.STERLING_OWNER_DISPLAY_NAME || 'Owner / Founder'),
-    };
-    await run('npm', ['run', 'bootstrap:owner'], { env: bootstrapEnv });
+    await run(process.execPath, ['dist/bootstrap-owner.js'], {
+      env: {
+        ...process.env,
+        STERLING_OWNER_USERNAME: ownerUsername,
+        STERLING_OWNER_PASSWORD: ownerPassword,
+        STERLING_OWNER_DISPLAY_NAME: ownerDisplayName,
+      },
+    });
     console.log('[Platform V2] Owner bootstrap completed. Remove STERLING_BOOTSTRAP_OWNER and STERLING_OWNER_PASSWORD from .env before the next restart.');
   }
 
