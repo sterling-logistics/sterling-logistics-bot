@@ -4,10 +4,33 @@ import { join } from 'node:path';
 
 const repoRoot = process.cwd();
 const platformDir = join(repoRoot, 'platform-v2');
+const envFile = join(platformDir, '.env');
 
 if (!existsSync(join(platformDir, 'package.json'))) {
   console.error('[Platform V2] Missing platform-v2/package.json. Check the Git branch and repository checkout.');
   process.exit(1);
+}
+
+if (!existsSync(envFile)) {
+  console.error(`[Platform V2] Missing environment file: ${envFile}`);
+  process.exit(1);
+}
+
+try {
+  // Apollo starts this wrapper from the repository root. Load Platform V2's
+  // environment file explicitly so migrations and the API receive the same
+  // configuration regardless of the parent working directory.
+  process.loadEnvFile(envFile);
+} catch (error) {
+  console.error('[Platform V2] Could not load platform-v2/.env:', error);
+  process.exit(1);
+}
+
+for (const required of ['DATABASE_URL', 'JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET']) {
+  if (!process.env[required]) {
+    console.error(`[Platform V2] ${required} is missing from platform-v2/.env`);
+    process.exit(1);
+  }
 }
 
 function run(command, args, options = {}) {
