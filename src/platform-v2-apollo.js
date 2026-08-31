@@ -62,8 +62,15 @@ try {
     if (!process.env.STERLING_OWNER_USERNAME || !process.env.STERLING_OWNER_PASSWORD) {
       throw new Error('STERLING_BOOTSTRAP_OWNER is enabled but Owner username/password are missing.');
     }
+
     console.log('[Platform V2] One-time Owner bootstrap requested...');
-    await run('npm', ['run', 'bootstrap:owner']);
+    const bootstrapEnv = {
+      ...process.env,
+      STERLING_OWNER_USERNAME: String(process.env.STERLING_OWNER_USERNAME),
+      STERLING_OWNER_PASSWORD: String(process.env.STERLING_OWNER_PASSWORD),
+      STERLING_OWNER_DISPLAY_NAME: String(process.env.STERLING_OWNER_DISPLAY_NAME || 'Owner / Founder'),
+    };
+    await run('npm', ['run', 'bootstrap:owner'], { env: bootstrapEnv });
     console.log('[Platform V2] Owner bootstrap completed. Remove STERLING_BOOTSTRAP_OWNER and STERLING_OWNER_PASSWORD from .env before the next restart.');
   }
 
@@ -71,7 +78,7 @@ try {
     ...process.env,
     NODE_ENV: process.env.NODE_ENV || 'production',
     HOST: process.env.HOST || '0.0.0.0',
-    PORT: process.env.PORT || process.env.SERVER_PORT || '8200',
+    PORT: process.env.SERVER_PORT || process.env.PORT || '8200',
   };
 
   console.log(`[Platform V2] Starting API on ${apiEnv.HOST}:${apiEnv.PORT}...`);
