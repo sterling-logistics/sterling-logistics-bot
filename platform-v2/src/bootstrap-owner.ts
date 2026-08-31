@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import argon2 from 'argon2';
 import { z } from 'zod';
 import { db } from './db.js';
