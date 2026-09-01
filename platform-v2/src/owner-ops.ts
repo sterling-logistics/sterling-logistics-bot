@@ -26,7 +26,7 @@ export async function registerOwnerOperationsRoutes(app: FastifyInstance): Promi
     const [rows] = await db.query<any[]>(
       `SELECT p.public_id AS id, j.public_id AS jobId, p.amount, p.currency, p.status,
               p.attempt_count AS attemptCount, p.lease_expires_at AS leaseExpiresAt,
-              p.balance_before AS balanceBefore, p.balance_after AS balanceAfter,
+              p.confirmed_balance_before AS balanceBefore, p.confirmed_balance_after AS balanceAfter,
               p.last_error AS lastError, p.applied_at AS appliedAt, p.created_at AS createdAt,
               u.id AS driverUserId, u.username, u.display_name AS driverDisplayName
          FROM payouts p
