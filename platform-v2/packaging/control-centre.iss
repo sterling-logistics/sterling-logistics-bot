@@ -1,5 +1,5 @@
 #define MyAppName "Sterling Control Centre"
-#define MyAppVersion "2.0.0-alpha.2"
+#define MyAppVersion "2.0.0-alpha.3"
 #define MyAppPublisher "Sterling Logistics"
 #define MyAppExeName "SterlingControlCentre.exe"
 
@@ -11,7 +11,7 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={localappdata}\Programs\Sterling Logistics\Control Centre
 DefaultGroupName=Sterling Logistics
 OutputDir=output
-OutputBaseFilename=Sterling-Control-Centre-2.0.0-alpha.2-Setup
+OutputBaseFilename=Sterling-Control-Centre-2.0.0-alpha.3-Setup
 Compression=lzma2
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible
