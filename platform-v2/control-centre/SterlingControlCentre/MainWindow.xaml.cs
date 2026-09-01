@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Threading;
 using Sterling.Logistics.ControlCentre.Services;
 
@@ -68,6 +69,17 @@ public partial class MainWindow : Window
             return;
         }
         new LiveMapWindow(_api) { Owner = this }.Show();
+    }
+
+    private void OwnerDataButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_api.IsOwnerSignedIn)
+        {
+            StatusText.Text = "Owner/Founder authentication is required.";
+            return;
+        }
+        var tab = (sender as Button)?.Tag?.ToString();
+        new OwnerDataWindow(_api, tab) { Owner = this }.Show();
     }
 
     private void OwnerMenuButton_Click(object sender, RoutedEventArgs e)
