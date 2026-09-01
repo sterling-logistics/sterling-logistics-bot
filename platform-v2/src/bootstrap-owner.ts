@@ -1,4 +1,3 @@
-import 'dotenv/config';
 import argon2 from 'argon2';
 import { z } from 'zod';
 import { db } from './db.js';
@@ -10,19 +9,22 @@ const schema = z.object({
 });
 
 async function main() {
-  const parsed = schema.safeParse({
+  const input = {
     username: process.env.STERLING_OWNER_USERNAME,
     password: process.env.STERLING_OWNER_PASSWORD,
     displayName: process.env.STERLING_OWNER_DISPLAY_NAME ?? 'Owner / Founder'
-  });
+  };
 
+  const parsed = schema.safeParse(input);
   if (!parsed.success) {
-    throw new Error('Set STERLING_OWNER_USERNAME, STERLING_OWNER_PASSWORD (minimum 16 characters), and optionally STERLING_OWNER_DISPLAY_NAME.');
+    const invalid = parsed.error.issues.map((issue) => issue.path[0]).filter(Boolean).join(', ');
+    throw new Error(`Owner bootstrap configuration is invalid: ${invalid || 'unknown field'}. Username must be 3-40 lowercase letters/numbers/._- and password must be at least 16 characters.`);
   }
 
   const [owners] = await db.query<any[]>(`SELECT id, username FROM users WHERE role = 'owner' LIMIT 1`);
   if (owners[0]) {
-    throw new Error(`Owner account already exists (${owners[0].username}). Bootstrap will not overwrite it.`);
+    console.log(`Sterling Owner/Founder account already exists: ${owners[0].username}. Continuing startup.`);
+    return;
   }
 
   const [duplicate] = await db.query<any[]>(`SELECT id FROM users WHERE username = ? LIMIT 1`, [parsed.data.username]);
