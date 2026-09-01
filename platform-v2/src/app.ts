@@ -8,6 +8,7 @@ import { registerAuthRoutes } from './auth.js';
 import { config } from './config.js';
 import { pingDatabase } from './db.js';
 import { registerJobRoutes } from './jobs.js';
+import { registerLiveMapRoutes } from './live-map.js';
 import { registerLiveOpsRoutes } from './live-ops.js';
 import { registerOwnerOperationsRoutes } from './owner-ops.js';
 import { registerPayoutRoutes } from './payouts.js';
@@ -37,6 +38,7 @@ export async function buildApp() {
     return { status: 'ok', database: 'up', version: '2.0.0-alpha.4' };
   });
 
+  await registerLiveMapRoutes(app);
   await registerAuthRoutes(app);
   await registerAccountManagementRoutes(app);
   await registerJobRoutes(app);
