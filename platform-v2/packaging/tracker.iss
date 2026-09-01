@@ -1,5 +1,5 @@
 #define MyAppName "Sterling Tachograph"
-#define MyAppVersion "2.0.0-alpha.3"
+#define MyAppVersion "2.0.0-alpha.4"
 #define MyAppPublisher "Sterling Logistics"
 #define MyAppExeName "SterlingTracker.exe"
 
@@ -11,7 +11,7 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={localappdata}\Programs\Sterling Logistics\Tachograph
 DefaultGroupName=Sterling Logistics
 OutputDir=output
-OutputBaseFilename=Sterling-Tachograph-2.0.0-alpha.3-Setup
+OutputBaseFilename=Sterling-Tachograph-2.0.0-alpha.4-Setup
 Compression=lzma2
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible
