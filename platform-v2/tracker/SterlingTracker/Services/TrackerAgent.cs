@@ -76,8 +76,6 @@ public sealed class TrackerAgent : IAsyncDisposable
                     _jobsLoadedAt = DateTimeOffset.UtcNow;
                 }
 
-                await ProcessTelemetryEventsAsync(session.AccessToken, cancellationToken);
-
                 var activeJob = _jobs.FirstOrDefault(x => string.Equals(x.Status, "in_progress", StringComparison.OrdinalIgnoreCase));
                 var onJob = live.SdkActive ? live.OnJob : activeJob is not null;
                 var gameRunning = detectedGame.IsRunning || live.SdkActive;
@@ -102,7 +100,10 @@ public sealed class TrackerAgent : IAsyncDisposable
                     DamagePercent: live.SdkActive ? live.DamagePercent : null,
                     FinesTotal: live.SdkActive ? live.FinesTotal : null);
 
+                // Presence must remain healthy even if a delivery event needs to be retried.
                 await _api.SendHeartbeatAsync(session.AccessToken, heartbeat, cancellationToken);
+                await ProcessTelemetryEventsAsync(session.AccessToken, cancellationToken);
+
                 var jobText = onJob
                     ? $" · {heartbeat.OriginCity ?? "?"} → {heartbeat.DestinationCity ?? "?"}"
                     : string.Empty;
@@ -190,6 +191,20 @@ public sealed class TrackerAgent : IAsyncDisposable
     private async Task HandleJobDeliveredAsync(string accessToken, ScsTelemetrySnapshot live, CancellationToken cancellationToken)
     {
         var job = FindMatchingJob("in_progress", live) ?? FindActiveJob();
+
+        // SCS can occasionally miss the start pulse while still giving us the delivery pulse.
+        // If that happens, recover the matching assigned Sterling job and advance it before submitting.
+        if (job is null)
+        {
+            var assignedJob = FindMatchingJob("assigned", live);
+            if (assignedJob is not null)
+            {
+                await _api.StartJobAsync(accessToken, assignedJob.Id, cancellationToken);
+                _jobs = _jobs.Select(x => x.Id == assignedJob.Id ? x with { Status = "in_progress" } : x).ToArray();
+                job = assignedJob with { Status = "in_progress" };
+            }
+        }
+
         if (job is null)
         {
             await _api.SendTelemetryEventAsync(accessToken,
@@ -205,6 +220,7 @@ public sealed class TrackerAgent : IAsyncDisposable
         {
             _jobSync.MarkSubmitted(job.Id);
             _jobs = _jobs.Select(x => x.Id == job.Id ? x with { Status = result.Status } : x).ToArray();
+            _jobsLoadedAt = DateTimeOffset.MinValue;
         }
 
         var payload = BuildJobPayload(live);
