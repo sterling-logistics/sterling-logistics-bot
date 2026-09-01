@@ -15,7 +15,7 @@ public sealed class SterlingApiClient
         _http = httpClient ?? new HttpClient();
         var configured = Environment.GetEnvironmentVariable("STERLING_API_URL");
         _http.BaseAddress = new Uri(string.IsNullOrWhiteSpace(configured)
-            ? "https://sterlinglogisticsvtc.co.uk/"
+            ? "http://45.43.163.175:8101/"
             : configured.TrimEnd('/') + "/");
         _http.Timeout = TimeSpan.FromSeconds(15);
         _http.DefaultRequestHeaders.UserAgent.ParseAdd("SterlingTachograph/2.0");
