@@ -12,12 +12,13 @@
      <TextBlock Text="CONTROL CENTRE" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,2,0,28"/>
      <Button Content="Dashboard" Height="42" Margin="0,0,0,8"/>
      <Button x:Name="LiveMapButton" Content="Live Map" Height="42" Margin="0,0,0,8" IsEnabled="False" Click="LiveMapButton_Click"/>
-     <Button Content="Drivers" Height="42" Margin="0,0,0,8"/>
-     <Button Content="Jobs" Height="42" Margin="0,0,0,8"/>
-     <Button Content="Approvals" Height="42" Margin="0,0,0,8"/>
-     <Button Content="Payments" Height="42" Margin="0,0,0,8"/>
-     <Button Content="Finance" Height="42" Margin="0,0,0,8"/>
-     <Button Content="Audit Logs" Height="42" Margin="0,0,0,8"/>
+     <Button Content="Drivers" Tag="drivers" Height="42" Margin="0,0,0,8" Click="OwnerDataButton_Click"/>
+     <Button Content="Jobs" Tag="jobs" Height="42" Margin="0,0,0,8" Click="OwnerDataButton_Click"/>
+     <Button Content="Approvals" Tag="approvals" Height="42" Margin="0,0,0,8" Click="OwnerDataButton_Click"/>
+     <Button Content="Payments" Tag="payments" Height="42" Margin="0,0,0,8" Click="OwnerDataButton_Click"/>
+     <Button Content="Finance" Tag="finance" Height="42" Margin="0,0,0,8" Click="OwnerDataButton_Click"/>
+     <Button Content="Audit Logs" Tag="audit" Height="42" Margin="0,0,0,8" Click="OwnerDataButton_Click"/>
+     <Button Content="System Health" Tag="system" Height="42" Margin="0,0,0,8" Click="OwnerDataButton_Click"/>
      <Button x:Name="OwnerMenuButton" Content="Owner Menu" Height="42" Margin="0,0,0,8" IsEnabled="False" Click="OwnerMenuButton_Click"/>
     </StackPanel>
     <StackPanel DockPanel.Dock="Bottom" VerticalAlignment="Bottom">
