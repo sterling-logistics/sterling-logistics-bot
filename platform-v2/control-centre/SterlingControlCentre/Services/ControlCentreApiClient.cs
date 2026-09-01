@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -9,7 +10,9 @@ public sealed class ControlCentreApiClient
 {
     private readonly HttpClient _http = new();
     private readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web);
+    private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private string? _accessToken;
+    private string? _refreshToken;
 
     public ControlCentreApiClient()
     {
@@ -22,7 +25,7 @@ public sealed class ControlCentreApiClient
     }
 
     public SterlingOwner? CurrentOwner { get; private set; }
-    public bool IsOwnerSignedIn => CurrentOwner is not null && !string.IsNullOrWhiteSpace(_accessToken);
+    public bool IsOwnerSignedIn => CurrentOwner is not null && !string.IsNullOrWhiteSpace(_accessToken) && !string.IsNullOrWhiteSpace(_refreshToken);
 
     public async Task LoginOwnerAsync(string username, string password, CancellationToken cancellationToken = default)
     {
@@ -36,6 +39,7 @@ public sealed class ControlCentreApiClient
             throw new UnauthorizedAccessException("Sterling Control Centre is restricted to the Owner/Founder account.");
 
         _accessToken = login.AccessToken;
+        _refreshToken = login.RefreshToken;
         CurrentOwner = login.User;
     }
 
@@ -86,11 +90,64 @@ public sealed class ControlCentreApiClient
 
     private async Task<T> SendForJsonAsync<T>(HttpMethod method, string path, object? body, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(_accessToken)) throw new InvalidOperationException("Owner/Founder is not signed in.");
-        using var request = new HttpRequestMessage(method, path);
+        if (!IsOwnerSignedIn) throw new InvalidOperationException("Owner/Founder is not signed in.");
+
+        using var response = await SendAuthorizedAsync(method, path, body, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            await RefreshOwnerSessionAsync(cancellationToken);
+            using var retry = await SendAuthorizedAsync(method, path, body, cancellationToken);
+            return await ReadResponseAsync<T>(retry, cancellationToken);
+        }
+        return await ReadResponseAsync<T>(response, cancellationToken);
+    }
+
+    private async Task<HttpResponseMessage> SendAuthorizedAsync(HttpMethod method, string path, object? body, CancellationToken cancellationToken)
+    {
+        var request = new HttpRequestMessage(method, path);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _accessToken);
         if (body is not null) request.Content = JsonContent.Create(body, options: _json);
-        using var response = await _http.SendAsync(request, cancellationToken);
+        try
+        {
+            return await _http.SendAsync(request, cancellationToken);
+        }
+        finally
+        {
+            request.Dispose();
+        }
+    }
+
+    private async Task RefreshOwnerSessionAsync(CancellationToken cancellationToken)
+    {
+        await _refreshGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_refreshToken)) throw new UnauthorizedAccessException("Owner session has expired. Sign in again.");
+            using var response = await _http.PostAsJsonAsync("api/v2/auth/refresh", new { refreshToken = _refreshToken }, _json, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                ClearSession();
+                throw new UnauthorizedAccessException("Owner session has expired. Sign in again.");
+            }
+            var refreshed = await response.Content.ReadFromJsonAsync<LoginResponse>(_json, cancellationToken)
+                            ?? throw new UnauthorizedAccessException("Owner session refresh returned an invalid response.");
+            if (!string.Equals(refreshed.User.Role, "owner", StringComparison.OrdinalIgnoreCase))
+            {
+                ClearSession();
+                throw new UnauthorizedAccessException("Owner permissions are no longer valid.");
+            }
+            _accessToken = refreshed.AccessToken;
+            _refreshToken = refreshed.RefreshToken;
+            CurrentOwner = refreshed.User;
+        }
+        finally
+        {
+            _refreshGate.Release();
+        }
+    }
+
+    private async Task<T> ReadResponseAsync<T>(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
         if (!response.IsSuccessStatusCode)
         {
             ApiError? apiError = null;
@@ -101,6 +158,13 @@ public sealed class ControlCentreApiClient
         }
         return await response.Content.ReadFromJsonAsync<T>(_json, cancellationToken)
                ?? throw new InvalidOperationException("Invalid Sterling API response.");
+    }
+
+    private void ClearSession()
+    {
+        _accessToken = null;
+        _refreshToken = null;
+        CurrentOwner = null;
     }
 }
 
@@ -124,9 +188,10 @@ public sealed record OwnerPayout(Guid Id, Guid JobId, decimal Amount, string Cur
 public sealed record PayoutEnvelope(IReadOnlyList<OwnerPayout> Payouts);
 public sealed record AuditEvent(long Id, string EventType, string? EntityType, string? EntityId, JsonElement? Metadata, DateTime CreatedAt, string? ActorUsername, string? ActorDisplayName, string? TargetUsername, string? TargetDisplayName);
 public sealed record AuditEnvelope(IReadOnlyList<AuditEvent> Events);
+public sealed record DriverHistoryDriver(long Id, string Username, string DisplayName, string Role, string RankName, bool IsActive, DateTime CreatedAt);
 public sealed record DriverHistoryStats(long TotalJobs, long CompletedJobs, decimal TotalDistanceKm, decimal TotalPaid);
 public sealed record DriverHistoryJob(Guid Id, string Status, string Game, string Cargo, string OriginCity, string DestinationCity, decimal? DistanceKm, decimal PayoutAmount, decimal? RevenueGame, DateTime? SubmittedAt, DateTime? ApprovedAt, DateTime? PaidAt, DateTime CreatedAt);
-public sealed record DriverHistoryEnvelope(OwnerDriver Driver, DriverHistoryStats Stats, IReadOnlyList<DriverHistoryJob> Jobs);
+public sealed record DriverHistoryEnvelope(DriverHistoryDriver Driver, DriverHistoryStats Stats, IReadOnlyList<DriverHistoryJob> Jobs);
 public sealed record SystemHealth(string Api, string Database, string Version, DateTime ServerTime, long ActiveAccounts, long TotalJobs, long TotalPayouts, long FailedPayouts);
 public sealed record CreateDriverResponse(long Id, string Username, string DisplayName, string RankName);
 public sealed record CreateJobResponse(Guid Id, string Status);
