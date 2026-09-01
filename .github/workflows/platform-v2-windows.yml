@@ -102,7 +102,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Sterling-Tachograph-V2-Setup
-          path: platform-v2/packaging/output/Sterling-Tachograph-2.0.0-alpha.3-Setup.exe
+          path: platform-v2/packaging/output/Sterling-Tachograph-2.0.0-alpha.4-Setup.exe
           if-no-files-found: error
 
       - name: Upload Control Centre installer
