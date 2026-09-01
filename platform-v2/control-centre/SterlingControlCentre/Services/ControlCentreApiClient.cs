@@ -51,6 +51,21 @@ public sealed class ControlCentreApiClient
     public async Task<IReadOnlyList<OwnerJob>> GetJobsAsync(CancellationToken cancellationToken = default)
         => (await SendForJsonAsync<JobEnvelope>(HttpMethod.Get, "api/v2/owner/jobs", null, cancellationToken)).Jobs;
 
+    public async Task<IReadOnlyList<PendingReviewJob>> GetPendingReviewAsync(CancellationToken cancellationToken = default)
+        => (await SendForJsonAsync<PendingReviewEnvelope>(HttpMethod.Get, "api/v2/owner/jobs/pending-review", null, cancellationToken)).Jobs;
+
+    public async Task<IReadOnlyList<OwnerPayout>> GetPayoutsAsync(CancellationToken cancellationToken = default)
+        => (await SendForJsonAsync<PayoutEnvelope>(HttpMethod.Get, "api/v2/owner/payouts", null, cancellationToken)).Payouts;
+
+    public async Task<IReadOnlyList<AuditEvent>> GetAuditAsync(CancellationToken cancellationToken = default)
+        => (await SendForJsonAsync<AuditEnvelope>(HttpMethod.Get, "api/v2/owner/audit", null, cancellationToken)).Events;
+
+    public Task<DriverHistoryEnvelope> GetDriverHistoryAsync(long driverId, CancellationToken cancellationToken = default)
+        => SendForJsonAsync<DriverHistoryEnvelope>(HttpMethod.Get, $"api/v2/owner/drivers/{driverId}/history", null, cancellationToken);
+
+    public Task<SystemHealth> GetSystemHealthAsync(CancellationToken cancellationToken = default)
+        => SendForJsonAsync<SystemHealth>(HttpMethod.Get, "api/v2/owner/system", null, cancellationToken);
+
     public Task<CreateDriverResponse> CreateDriverAsync(string username, string password, string displayName, string rankName, CancellationToken cancellationToken = default)
         => SendForJsonAsync<CreateDriverResponse>(HttpMethod.Post, "api/v2/owner/drivers", new { username, password, displayName, rankName }, cancellationToken);
 
@@ -78,7 +93,8 @@ public sealed class ControlCentreApiClient
         using var response = await _http.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            var apiError = await response.Content.ReadFromJsonAsync<ApiError>(_json, cancellationToken).ConfigureAwait(false);
+            ApiError? apiError = null;
+            try { apiError = await response.Content.ReadFromJsonAsync<ApiError>(_json, cancellationToken).ConfigureAwait(false); } catch { }
             throw new InvalidOperationException(apiError?.Error is { Length: > 0 }
                 ? $"Sterling rejected the operation: {apiError.Error}"
                 : $"Sterling API request failed ({(int)response.StatusCode}).");
@@ -102,6 +118,16 @@ public sealed record OwnerDriver(long Id, string Username, string DisplayName, s
 public sealed record OwnerDriverEnvelope(IReadOnlyList<OwnerDriver> Drivers);
 public sealed record OwnerJob(Guid Id, string Status, string Game, string Cargo, string OriginCity, string DestinationCity, decimal? DistanceKm, decimal PayoutAmount, DateTime? SubmittedAt, DateTime? ApprovedAt, DateTime? PaidAt, DateTime CreatedAt, long DriverUserId, string Username, string DriverDisplayName, string DriverRole);
 public sealed record JobEnvelope(IReadOnlyList<OwnerJob> Jobs);
+public sealed record PendingReviewJob(Guid Id, string Game, string Cargo, string OriginCity, string DestinationCity, decimal? DistanceKm, decimal PayoutAmount, decimal? RevenueGame, DateTime? SubmittedAt, long DriverUserId, string Username, string DriverDisplayName, string RankName);
+public sealed record PendingReviewEnvelope(IReadOnlyList<PendingReviewJob> Jobs);
+public sealed record OwnerPayout(Guid Id, Guid JobId, decimal Amount, string Currency, string Status, int AttemptCount, DateTime? LeaseExpiresAt, decimal? BalanceBefore, decimal? BalanceAfter, string? LastError, DateTime? AppliedAt, DateTime CreatedAt, long DriverUserId, string Username, string DriverDisplayName);
+public sealed record PayoutEnvelope(IReadOnlyList<OwnerPayout> Payouts);
+public sealed record AuditEvent(long Id, string EventType, string? EntityType, string? EntityId, JsonElement? Metadata, DateTime CreatedAt, string? ActorUsername, string? ActorDisplayName, string? TargetUsername, string? TargetDisplayName);
+public sealed record AuditEnvelope(IReadOnlyList<AuditEvent> Events);
+public sealed record DriverHistoryStats(long TotalJobs, long CompletedJobs, decimal TotalDistanceKm, decimal TotalPaid);
+public sealed record DriverHistoryJob(Guid Id, string Status, string Game, string Cargo, string OriginCity, string DestinationCity, decimal? DistanceKm, decimal PayoutAmount, decimal? RevenueGame, DateTime? SubmittedAt, DateTime? ApprovedAt, DateTime? PaidAt, DateTime CreatedAt);
+public sealed record DriverHistoryEnvelope(OwnerDriver Driver, DriverHistoryStats Stats, IReadOnlyList<DriverHistoryJob> Jobs);
+public sealed record SystemHealth(string Api, string Database, string Version, DateTime ServerTime, long ActiveAccounts, long TotalJobs, long TotalPayouts, long FailedPayouts);
 public sealed record CreateDriverResponse(long Id, string Username, string DisplayName, string RankName);
 public sealed record CreateJobResponse(Guid Id, string Status);
 public sealed record OperationResponse(bool Ok, string? Status = null, bool Duplicate = false, Guid? PayoutId = null);
