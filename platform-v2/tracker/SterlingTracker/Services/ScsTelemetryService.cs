@@ -70,20 +70,27 @@ public sealed class ScsTelemetryService : IDisposable
         var damagePercent = Math.Clamp(Math.Max(truckDamage, cargoDamage), 0d, 100d);
         var heading = orientation is null ? (double?)null : NormalizeHeading(orientation.Heading * 360d);
 
+        var deliveredDistance = gameplay?.JobDelivered?.DistanceKm ?? 0;
+        var deliveredRevenue = gameplay?.JobDelivered?.Revenue ?? 0;
+        var deliveredCargoDamage = (gameplay?.JobDelivered?.CargoDamage ?? 0f) * 100d;
+
         var snapshot = new ScsTelemetrySnapshot(data.SdkActive, data.Paused, game, pos?.X, pos?.Y, pos?.Z, heading,
             Math.Abs(dashboard?.Speed?.Kph ?? 0f), EmptyToNull(constants?.Brand), EmptyToNull(constants?.Name), fuelPercent,
             damagePercent, cargoDamage, EmptyToNull(job?.CargoValues?.Name), EmptyToNull(job?.CitySource), EmptyToNull(job?.CityDestination),
             EmptyToNull(job?.CompanySource), EmptyToNull(job?.CompanyDestination), job?.PlannedDistanceKm ?? 0, job?.Income ?? 0,
-            special?.OnJob ?? false, _finesTotal, gameplay?.JobDelivered?.DistanceKm ?? 0, gameplay?.JobDelivered?.Revenue ?? 0,
-            (gameplay?.JobDelivered?.CargoDamage ?? 0f) * 100d, null);
+            special?.OnJob ?? false, _finesTotal, deliveredDistance, deliveredRevenue, deliveredCargoDamage, null);
 
         lock (_gate) _latest = snapshot;
         SafeSnapshotChanged(snapshot);
 
         var onJob = special?.OnJob ?? false;
-        var delivered = special?.JobDelivered ?? false;
         var cancelled = special?.JobCancelled ?? false;
+        var explicitDelivered = special?.JobDelivered ?? false;
+        var hasDeliveryPayload = deliveredDistance > 0 || deliveredRevenue > 0;
+        var endedJobWithDeliveryPayload = _previousOnJob && !onJob && hasDeliveryPayload && !cancelled;
+        var delivered = explicitDelivered || endedJobWithDeliveryPayload;
         var fined = special?.Fined ?? false;
+
         if (onJob && !_previousOnJob) SafeTelemetryEvent(new ScsTelemetryEvent(ScsTelemetryEventType.JobStarted, snapshot));
         if (delivered && !_previousDelivered) SafeTelemetryEvent(new ScsTelemetryEvent(ScsTelemetryEventType.JobDelivered, snapshot));
         if (cancelled && !_previousCancelled) SafeTelemetryEvent(new ScsTelemetryEvent(ScsTelemetryEventType.JobCancelled, snapshot));
@@ -95,7 +102,11 @@ public sealed class ScsTelemetryService : IDisposable
             lock (_gate) _latest = snapshot;
             SafeTelemetryEvent(new ScsTelemetryEvent(ScsTelemetryEventType.Fine, snapshot, amount));
         }
-        _previousOnJob = onJob; _previousDelivered = delivered; _previousCancelled = cancelled; _previousFined = fined;
+
+        _previousOnJob = onJob;
+        _previousDelivered = delivered;
+        _previousCancelled = cancelled;
+        _previousFined = fined;
     }
 
     private void SetError(string message)
