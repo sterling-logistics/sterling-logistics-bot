@@ -71,29 +71,19 @@ public partial class MainWindow : Window
         return value.Length <= 63 ? value : value[..63];
     }
 
-    private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    private void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
-        var remembered = _sessionStore.Load();
-        if (remembered is null) return;
-
-        StatusText.Text = "Restoring secure Sterling session...";
-        try
-        {
-            var refreshed = await _api.RefreshAsync(remembered.RefreshToken);
-            _sessionStore.Save(refreshed);
-            StartAgent(refreshed);
-            UsernameBox.Text = refreshed.User.Username;
-            PasswordBox.IsEnabled = false;
-            UsernameBox.IsEnabled = false;
-            RememberMeBox.IsEnabled = false;
-            SignInButton.IsEnabled = false;
-            SignInButton.Content = $"Signed in as {refreshed.User.DisplayName}";
-        }
-        catch
-        {
-            _sessionStore.Clear();
-            StatusText.Text = "Session expired. Sign in again.";
-        }
+        // A fresh launch always requires an explicit sign-in. This prevents a
+        // previous installation's DPAPI session from making a clean install
+        // appear authenticated before the driver has entered credentials.
+        _sessionStore.Clear();
+        PasswordBox.Clear();
+        UsernameBox.IsEnabled = true;
+        PasswordBox.IsEnabled = true;
+        RememberMeBox.IsEnabled = true;
+        SignInButton.IsEnabled = true;
+        SignInButton.Content = "Sign in";
+        StatusText.Text = "Sign in to connect Sterling Tachograph.";
     }
 
     private async void SignInButton_Click(object sender, RoutedEventArgs e)
