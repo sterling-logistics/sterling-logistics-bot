@@ -1,7 +1,8 @@
 <Application x:Class="Sterling.Logistics.Tracker.App"
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
- StartupUri="MainWindow.xaml">
+ StartupUri="MainWindow.xaml"
+ ShutdownMode="OnExplicitShutdown">
  <Application.Resources>
   <SolidColorBrush x:Key="SterlingBackground" Color="#0B1220"/>
   <SolidColorBrush x:Key="SterlingPanel" Color="#111C2E"/>
