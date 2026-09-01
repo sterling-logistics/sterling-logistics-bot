@@ -75,13 +75,13 @@ jobs:
           $extract = Join-Path $env:RUNNER_TEMP 'scs-telemetry'
           Invoke-WebRequest 'https://github.com/RenCloud/scs-sdk-plugin/releases/download/V.1.12.1/release_v_1_12_1.zip' -OutFile $zip
           Expand-Archive $zip -DestinationPath $extract -Force
-          $dlls = Get-ChildItem $extract -Recurse -Filter '*.dll'
-          $plugin = $dlls | Where-Object { $_.FullName -match 'win_x64|x64' } | Select-Object -First 1
-          if (-not $plugin) { $plugin = $dlls | Select-Object -First 1 }
-          if (-not $plugin) { throw 'No telemetry plugin DLL found in pinned SCS release.' }
+          $plugin = Get-ChildItem $extract -Recurse -File -Filter 'scs-telemetry.dll' | Where-Object { $_.FullName -match '[\\/]Win64[\\/]' } | Select-Object -First 1
+          if (-not $plugin) { throw 'RenCloud Win64 scs-telemetry.dll was not found in the pinned release.' }
           New-Item -ItemType Directory -Force platform-v2/packaging/payload/telemetry | Out-Null
           Copy-Item $plugin.FullName platform-v2/packaging/payload/telemetry/scs-telemetry.dll -Force
-          Write-Host "Bundled telemetry plugin: $($plugin.FullName)"
+          $bundled = Get-Item platform-v2/packaging/payload/telemetry/scs-telemetry.dll
+          if ($bundled.Length -lt 10000) { throw 'Bundled telemetry plugin is unexpectedly small.' }
+          Write-Host "Bundled telemetry plugin: $($plugin.FullName) ($($bundled.Length) bytes)"
 
       - name: Compile Windows installers
         shell: pwsh
@@ -102,7 +102,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Sterling-Tachograph-V2-Setup
-          path: platform-v2/packaging/output/Sterling-Tachograph-2.0.0-alpha.4-Setup.exe
+          path: platform-v2/packaging/output/Sterling-Tachograph-2.0.0-alpha.5-Setup.exe
           if-no-files-found: error
 
       - name: Upload Control Centre installer
