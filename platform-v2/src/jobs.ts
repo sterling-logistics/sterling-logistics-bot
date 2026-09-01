@@ -14,7 +14,9 @@ const createJobSchema = z.object({
   originCity: z.string().trim().min(1).max(120),
   destinationCity: z.string().trim().min(1).max(120),
   distanceKm: z.coerce.number().min(0).max(100000).optional(),
-  payoutAmount: z.coerce.number().min(0).max(100000000)
+  // ETS2/ATS money_account is stored as whole game-currency units. Keeping this
+  // invariant at assignment prevents an approved payout that the Tracker cannot apply exactly.
+  payoutAmount: z.coerce.number().int().min(0).max(100000000)
 });
 
 const submitSchema = z.object({
