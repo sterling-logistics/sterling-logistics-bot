@@ -98,11 +98,15 @@ try {
     console.log('[Platform V2] Owner bootstrap completed. Remove STERLING_BOOTSTRAP_OWNER and STERLING_OWNER_PASSWORD from .env before the next restart.');
   }
 
+  // The Platform V2 .env is the source of truth for its listener. Apollo/Pterodactyl
+  // may inject SERVER_PORT for the generic Node egg; that must not silently override
+  // an explicit PORT configured for Platform V2.
+  const apiPort = String(fileEnv.PORT ?? process.env.PORT ?? process.env.SERVER_PORT ?? '8200').trim() || '8200';
   const apiEnv = {
     ...process.env,
     NODE_ENV: process.env.NODE_ENV || 'production',
     HOST: process.env.HOST || '0.0.0.0',
-    PORT: process.env.SERVER_PORT || process.env.PORT || '8200',
+    PORT: apiPort,
   };
 
   console.log(`[Platform V2] Starting API on ${apiEnv.HOST}:${apiEnv.PORT}...`);
