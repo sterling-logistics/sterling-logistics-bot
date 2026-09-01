@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using Sterling.Logistics.ControlCentre.Services;
 
 namespace Sterling.Logistics.ControlCentre;
@@ -7,18 +8,24 @@ namespace Sterling.Logistics.ControlCentre;
 public partial class OwnerDataWindow : Window
 {
     private readonly ControlCentreApiClient _api;
+    private readonly DispatcherTimer _refreshTimer;
     private bool _loaded;
+    private bool _refreshing;
 
     public OwnerDataWindow(ControlCentreApiClient api, string? initialTab = null)
     {
         InitializeComponent();
         _api = api;
+        _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+        _refreshTimer.Tick += async (_, _) => await RefreshCurrentAsync();
         Loaded += async (_, _) =>
         {
             SelectTab(initialTab);
             _loaded = true;
             await RefreshCurrentAsync();
+            _refreshTimer.Start();
         };
+        Closed += (_, _) => _refreshTimer.Stop();
     }
 
     private void SelectTab(string? tab)
@@ -45,7 +52,8 @@ public partial class OwnerDataWindow : Window
 
     private async Task RefreshCurrentAsync()
     {
-        if (!_api.IsOwnerSignedIn) return;
+        if (!_api.IsOwnerSignedIn || _refreshing) return;
+        _refreshing = true;
         try
         {
             StatusText.Text = "Refreshing Sterling data...";
@@ -53,6 +61,8 @@ public partial class OwnerDataWindow : Window
             {
                 case 0:
                     DriversGrid.ItemsSource = await _api.GetDriversAsync();
+                    if (DriversGrid.SelectedItem is OwnerDriver selectedDriver)
+                        await RefreshDriverHistoryAsync(selectedDriver);
                     break;
                 case 1:
                     JobsGrid.ItemsSource = await _api.GetJobsAsync();
@@ -75,11 +85,15 @@ public partial class OwnerDataWindow : Window
                     SystemDetailText.Text = $"Platform {health.Version} · {health.ActiveAccounts} active accounts · {health.TotalPayouts} payouts · server {health.ServerTime.ToLocalTime():g}";
                     break;
             }
-            StatusText.Text = $"Updated {DateTime.Now:HH:mm:ss}.";
+            StatusText.Text = $"Live data updated {DateTime.Now:HH:mm:ss}.";
         }
         catch (Exception ex)
         {
             StatusText.Text = $"Could not refresh: {ex.Message}";
+        }
+        finally
+        {
+            _refreshing = false;
         }
     }
 
@@ -88,18 +102,23 @@ public partial class OwnerDataWindow : Window
         if (DriversGrid.SelectedItem is not OwnerDriver driver) return;
         try
         {
-            var history = await _api.GetDriverHistoryAsync(driver.Id);
-            DriverStatsText.Text = $"{history.Driver.DisplayName} · {history.Stats.CompletedJobs}/{history.Stats.TotalJobs} completed · {history.Stats.TotalDistanceKm:0} km · {history.Stats.TotalPaid:0} paid";
-            DriverHistoryGrid.ItemsSource = history.Jobs.Select(job => new DriverHistoryRow(
-                job.CreatedAt,
-                $"{job.OriginCity} → {job.DestinationCity}",
-                job.Status,
-                job.PayoutAmount)).ToArray();
+            await RefreshDriverHistoryAsync(driver);
         }
         catch (Exception ex)
         {
             DriverStatsText.Text = $"Could not load driver history: {ex.Message}";
         }
+    }
+
+    private async Task RefreshDriverHistoryAsync(OwnerDriver driver)
+    {
+        var history = await _api.GetDriverHistoryAsync(driver.Id);
+        DriverStatsText.Text = $"{history.Driver.DisplayName} · {history.Stats.CompletedJobs}/{history.Stats.TotalJobs} completed · {history.Stats.TotalDistanceKm:0} km · {history.Stats.TotalPaid:0} paid";
+        DriverHistoryGrid.ItemsSource = history.Jobs.Select(job => new DriverHistoryRow(
+            job.CreatedAt,
+            $"{job.OriginCity} → {job.DestinationCity}",
+            job.Status,
+            job.PayoutAmount)).ToArray();
     }
 
     private async void ApproveButton_Click(object sender, RoutedEventArgs e)
