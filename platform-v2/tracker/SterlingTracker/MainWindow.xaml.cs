@@ -1,4 +1,7 @@
+using System.ComponentModel;
+using System.Drawing;
 using System.Windows;
+using Forms = System.Windows.Forms;
 using Sterling.Logistics.Tracker.Services;
 
 namespace Sterling.Logistics.Tracker;
@@ -10,21 +13,62 @@ public partial class MainWindow : Window
     private readonly ScsTelemetryService _telemetry = new();
     private readonly TrackerAgent _agent;
     private readonly PayoutWorker _payoutWorker;
+    private readonly Forms.NotifyIcon _trayIcon;
+    private bool _allowClose;
+    private bool _trayHintShown;
 
     public MainWindow()
     {
         InitializeComponent();
         _agent = new TrackerAgent(_api, new GameDetector(), _sessionStore, _telemetry, new JobSyncStateStore());
         _payoutWorker = new PayoutWorker(_api, _agent, new PayoutJournal());
+
+        _trayIcon = new Forms.NotifyIcon
+        {
+            Text = "Sterling Tachograph",
+            Icon = SystemIcons.Application,
+            Visible = true,
+            ContextMenuStrip = BuildTrayMenu()
+        };
+        _trayIcon.DoubleClick += (_, _) => Dispatcher.Invoke(ShowFromTray);
+
         _agent.StatusChanged += (_, status) => Dispatcher.Invoke(() =>
         {
             var game = status.GameRunning ? $" · {status.Game?.ToUpperInvariant()} detected" : string.Empty;
             StatusText.Text = $"{status.Message}{game}";
+            _trayIcon.Text = BuildTrayText(status.Message, status.Game, status.GameRunning);
         });
-        _payoutWorker.StatusChanged += (_, message) => Dispatcher.Invoke(() => StatusText.Text = message);
+        _payoutWorker.StatusChanged += (_, message) => Dispatcher.Invoke(() =>
+        {
+            StatusText.Text = message;
+            _trayIcon.Text = BuildTrayText(message, null, false);
+        });
+
         Loaded += MainWindow_Loaded;
+        Closing += MainWindow_Closing;
         Closed += MainWindow_Closed;
+        StateChanged += MainWindow_StateChanged;
         StatusText.Text = "Ready to connect.";
+    }
+
+    private Forms.ContextMenuStrip BuildTrayMenu()
+    {
+        var menu = new Forms.ContextMenuStrip();
+        var open = new Forms.ToolStripMenuItem("Open Sterling Tachograph");
+        open.Click += (_, _) => Dispatcher.Invoke(ShowFromTray);
+        var exit = new Forms.ToolStripMenuItem("Exit Sterling Tachograph");
+        exit.Click += (_, _) => Dispatcher.Invoke(ExitApplication);
+        menu.Items.Add(open);
+        menu.Items.Add(new Forms.ToolStripSeparator());
+        menu.Items.Add(exit);
+        return menu;
+    }
+
+    private static string BuildTrayText(string message, string? game, bool gameRunning)
+    {
+        var suffix = gameRunning && !string.IsNullOrWhiteSpace(game) ? $" · {game.ToUpperInvariant()}" : string.Empty;
+        var value = $"Sterling Tachograph · {message}{suffix}";
+        return value.Length <= 63 ? value : value[..63];
     }
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -41,6 +85,7 @@ public partial class MainWindow : Window
             UsernameBox.Text = refreshed.User.Username;
             PasswordBox.IsEnabled = false;
             UsernameBox.IsEnabled = false;
+            RememberMeBox.IsEnabled = false;
             SignInButton.IsEnabled = false;
             SignInButton.Content = $"Signed in as {refreshed.User.DisplayName}";
         }
@@ -98,9 +143,53 @@ public partial class MainWindow : Window
         SignInButton.IsEnabled = false;
     }
 
+    private void MainWindow_StateChanged(object? sender, EventArgs e)
+    {
+        if (WindowState == WindowState.Minimized)
+            HideToTray();
+    }
+
+    private void MainWindow_Closing(object? sender, CancelEventArgs e)
+    {
+        if (_allowClose) return;
+        e.Cancel = true;
+        HideToTray();
+    }
+
+    private void HideToTray()
+    {
+        Hide();
+        ShowInTaskbar = false;
+        if (_trayHintShown) return;
+        _trayHintShown = true;
+        _trayIcon.BalloonTipTitle = "Sterling Tachograph is still running";
+        _trayIcon.BalloonTipText = "Telemetry and Sterling jobs continue safely in the background. Double-click the tray icon to reopen.";
+        _trayIcon.ShowBalloonTip(4000);
+    }
+
+    private void ShowFromTray()
+    {
+        ShowInTaskbar = true;
+        Show();
+        WindowState = WindowState.Normal;
+        Activate();
+        Topmost = true;
+        Topmost = false;
+        Focus();
+    }
+
+    private void ExitApplication()
+    {
+        _allowClose = true;
+        Close();
+    }
+
     private async void MainWindow_Closed(object? sender, EventArgs e)
     {
+        _trayIcon.Visible = false;
+        _trayIcon.Dispose();
         await _payoutWorker.DisposeAsync();
         await _agent.DisposeAsync();
+        System.Windows.Application.Current.Shutdown();
     }
 }
