@@ -4,6 +4,7 @@ namespace Sterling.Logistics.Tracker.Services;
 
 public sealed class TrackerAgent : IAsyncDisposable
 {
+    private const string TrackerVersion = "2.0.0-alpha.4";
     private readonly SterlingApiClient _api;
     private readonly GameDetector _gameDetector;
     private readonly SecureSessionStore _sessionStore;
@@ -65,7 +66,7 @@ public sealed class TrackerAgent : IAsyncDisposable
                 {
                     await _api.SendTelemetryEventAsync(session.AccessToken,
                         new TrackerTelemetryEvent("tracker.started", game, null,
-                            new Dictionary<string, object?> { ["trackerVersion"] = "2.0.0-alpha.3" }), cancellationToken);
+                            new Dictionary<string, object?> { ["trackerVersion"] = TrackerVersion }), cancellationToken);
                     _trackerStartedEventSent = true;
                 }
 
@@ -82,7 +83,7 @@ public sealed class TrackerAgent : IAsyncDisposable
                 var gameRunning = detectedGame.IsRunning || live.SdkActive;
                 var status = onJob ? "on_job" : gameRunning ? (live.Paused ? "idle" : "driving") : "online";
                 var heartbeat = new TrackerHeartbeat(
-                    TrackerVersion: "2.0.0-alpha.3",
+                    TrackerVersion: TrackerVersion,
                     Game: game ?? activeJob?.Game,
                     GameRunning: gameRunning,
                     OnJob: onJob,
