@@ -126,6 +126,8 @@ jobs:
           STERLING_OWNER_DISPLAY_NAME=Sterling Apollo CI Owner
           EOF
       - name: Run Apollo wrapper
+        env:
+          SERVER_PORT: 8101
         run: |
           node src/platform-v2-apollo.js > /tmp/sterling-apollo.log 2>&1 &
           echo $! > /tmp/sterling-apollo.pid
