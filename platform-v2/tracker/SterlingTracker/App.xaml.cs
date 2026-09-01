@@ -1,7 +1,5 @@
-using System.Windows;
-
 namespace Sterling.Logistics.Tracker;
 
-public partial class App : Application
+public partial class App : System.Windows.Application
 {
 }
