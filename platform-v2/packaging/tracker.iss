@@ -1,5 +1,5 @@
 #define MyAppName "Sterling Tachograph"
-#define MyAppVersion "2.0.0-alpha.4"
+#define MyAppVersion "2.0.0-alpha.5"
 #define MyAppPublisher "Sterling Logistics"
 #define MyAppExeName "SterlingTracker.exe"
 
@@ -11,7 +11,7 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={localappdata}\Programs\Sterling Logistics\Tachograph
 DefaultGroupName=Sterling Logistics
 OutputDir=output
-OutputBaseFilename=Sterling-Tachograph-2.0.0-alpha.4-Setup
+OutputBaseFilename=Sterling-Tachograph-2.0.0-alpha.5-Setup
 Compression=lzma2
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible
@@ -38,6 +38,12 @@ Name: "startup"; Description: "Start Sterling Tachograph when I sign in to Windo
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "SterlingTachograph"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: startup; Flags: uninsdeletevalue
 
+[InstallDelete]
+; Clean state left by an older alpha so a reinstall cannot silently restore a
+; previous user's authentication/job state.
+Type: files; Name: "{localappdata}\Sterling Logistics\Tracker\session.dat"
+Type: files; Name: "{localappdata}\Sterling Logistics\Tracker\job-sync.json"
+
 [Run]
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Tools\Install-TelemetryPlugin.ps1"" -PluginPath ""{app}\TelemetryPlugin\scs-telemetry.dll"""; StatusMsg: "Installing Sterling telemetry plugin for ETS2/ATS..."; Flags: runhidden waituntilterminated; Check: FileExists(ExpandConstant('{app}\TelemetryPlugin\scs-telemetry.dll'))
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Tools\Install-TelemetryPlugin.ps1"" -PluginPath ""{app}\TelemetryPlugin\scs-telemetry.dll"""; StatusMsg: "Installing and verifying Sterling telemetry plugin for ETS2/ATS..."; Flags: runhidden waituntilterminated; Check: FileExists(ExpandConstant('{app}\TelemetryPlugin\scs-telemetry.dll'))
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch Sterling Tachograph"; Flags: nowait postinstall skipifsilent
