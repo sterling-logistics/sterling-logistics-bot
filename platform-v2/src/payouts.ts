@@ -19,6 +19,7 @@ const failSchema = z.object({
 });
 
 const payoutIdParams = z.object({ id: z.string().uuid() });
+const maxPayoutAttempts = 5;
 
 function currentUser(request: FastifyRequest): CurrentUser {
   return (request as any).sterlingUser as CurrentUser;
@@ -37,13 +38,14 @@ export async function registerPayoutRoutes(app: FastifyInstance): Promise<void> 
            FROM payouts p
            JOIN jobs j ON j.id = p.job_id
           WHERE p.driver_user_id = ?
+            AND p.attempt_count < ?
             AND (
               p.status IN ('pending','retrying')
               OR (p.status = 'processing' AND p.lease_expires_at IS NOT NULL AND p.lease_expires_at <= NOW(3))
             )
           ORDER BY p.created_at ASC
           LIMIT 1 FOR UPDATE`,
-        [user.id]
+        [user.id, maxPayoutAttempts]
       );
       const row = rows[0];
       if (!row) return null;
@@ -152,7 +154,7 @@ export async function registerPayoutRoutes(app: FastifyInstance): Promise<void> 
 
     const result = await withTransaction(async (connection) => {
       const [rows] = await connection.query<any[]>(
-        `SELECT id, status, lease_token FROM payouts WHERE public_id = ? AND driver_user_id = ? LIMIT 1 FOR UPDATE`,
+        `SELECT id, status, lease_token, attempt_count FROM payouts WHERE public_id = ? AND driver_user_id = ? LIMIT 1 FOR UPDATE`,
         [params.data.id, user.id]
       );
       const payout = rows[0];
@@ -160,23 +162,25 @@ export async function registerPayoutRoutes(app: FastifyInstance): Promise<void> 
       if (payout.status === 'applied') return 'applied';
       if (payout.status !== 'processing' || payout.lease_token !== body.data.leaseToken) return 'lease_invalid';
 
+      const terminal = Number(payout.attempt_count) >= maxPayoutAttempts;
+      const nextStatus = terminal ? 'failed' : 'retrying';
       await connection.execute(
         `UPDATE payouts
-            SET status = 'retrying', lease_token = NULL, lease_expires_at = NULL, last_error = ?
+            SET status = ?, lease_token = NULL, lease_expires_at = NULL, last_error = ?
           WHERE id = ?`,
-        [body.data.error, payout.id]
+        [nextStatus, body.data.error, payout.id]
       );
       await connection.execute(
         `INSERT INTO payout_events (payout_id, event_type, payload)
-         VALUES (?, 'payout.retry_scheduled', JSON_OBJECT('error', ?))`,
-        [payout.id, body.data.error]
+         VALUES (?, ?, JSON_OBJECT('error', ?, 'attempt', ?))`,
+        [payout.id, terminal ? 'payout.failed' : 'payout.retry_scheduled', body.data.error, payout.attempt_count]
       );
-      return 'retrying';
+      return nextStatus;
     });
 
     if (result === 'missing') return reply.code(404).send({ error: 'payout_not_found' });
     if (result === 'applied') return { ok: true, status: 'applied' };
     if (result === 'lease_invalid') return reply.code(409).send({ error: 'lease_invalid' });
-    return { ok: true, status: 'retrying' };
+    return { ok: true, status: result };
   });
 }
